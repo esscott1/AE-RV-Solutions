@@ -1,32 +1,33 @@
 ---
-// Hero image: swap the placeholder background for a real photo by
-// dropping a file at src/assets/hero-camping.jpg and uncommenting
-// the <img> tag below (see README "Replacing the hero photo").
+import { Image } from 'astro:assets';
+import heroImage from '../assets/heroImage.jpg';
 ---
 
 <header class="hero">
-  <!--
-    <img
-      src={heroImage.src}
+  <div class="hero__photo-frame">
+    <Image
+      src={heroImage}
       alt="A family relaxes outside their Grand Design travel trailer at a remote, off-grid campsite in the Colorado backcountry, mountains rising behind them at dusk."
       class="hero__photo"
+      widths={[640, 960, 1440, 1920]}
+      sizes="100vw"
+      loading="eager"
+      fetchpriority="high"
     />
-  -->
-  <div class="hero__photo hero__photo--placeholder" role="img" aria-label="A family relaxes outside their Grand Design travel trailer at a remote, off-grid campsite in the Colorado backcountry, mountains rising behind them at dusk."></div>
+    <div class="hero__scrim"></div>
 
-  <div class="hero__scrim"></div>
-
-  <div class="hero__arch" aria-hidden="true">
-    <svg viewBox="0 0 800 220" xmlns="http://www.w3.org/2000/svg">
-      <path id="archPath" d="M 60 200 A 340 340 0 0 1 740 200" fill="none" />
-      <text>
-        <textPath href="#archPath" startOffset="50%" text-anchor="middle">
-          A&amp;E RV Solutions
-        </textPath>
-      </text>
-    </svg>
+    <div class="hero__arch" aria-hidden="true">
+      <svg viewBox="0 0 800 220" xmlns="http://www.w3.org/2000/svg">
+        <path id="archPath" d="M 60 200 A 340 340 0 0 1 740 200" fill="none" />
+        <text>
+          <textPath href="#archPath" startOffset="50%" text-anchor="middle">
+            A&amp;E RV Solutions
+          </textPath>
+        </text>
+      </svg>
+    </div>
+    <p class="hero__arch-sr">A&amp;E RV Solutions</p>
   </div>
-  <p class="hero__arch-sr">A&amp;E RV Solutions</p>
 
   <div class="hero__content">
     <h1 class="hero__headline">Home doesn't end at the trailhead.</h1>
@@ -42,10 +43,13 @@
 <style>
   .hero {
     position: relative;
-    min-height: 92vh;
     display: flex;
     flex-direction: column;
-    justify-content: flex-end;
+  }
+
+  .hero__photo-frame {
+    position: relative;
+    height: clamp(280px, 42vh, 460px);
     overflow: hidden;
     isolation: isolate;
   }
@@ -60,38 +64,22 @@
     z-index: -2;
   }
 
-  /* Placeholder stand-in for the real campsite photograph.
-     Evokes dusk over a Colorado ridgeline until the image is swapped in. */
-  .hero__photo--placeholder {
-    background:
-      radial-gradient(ellipse 60% 40% at 50% 78%, rgba(232, 185, 79, 0.18), transparent 60%),
-      linear-gradient(
-        180deg,
-        #2c3f52 0%,
-        #3a5064 22%,
-        #5c6f5a 46%,
-        #71785a 58%,
-        #3a3226 78%,
-        #221c16 100%
-      );
-  }
-
   .hero__scrim {
     position: absolute;
     inset: 0;
     z-index: -1;
     background: linear-gradient(
       180deg,
-      rgba(14, 21, 18, 0.55) 0%,
-      rgba(14, 21, 18, 0.05) 30%,
-      rgba(14, 21, 18, 0.15) 55%,
-      rgba(14, 21, 18, 0.88) 100%
+      rgba(14, 21, 18, 0.45) 0%,
+      rgba(14, 21, 18, 0.05) 35%,
+      rgba(14, 21, 18, 0.05) 65%,
+      rgba(14, 21, 18, 0.55) 100%
     );
   }
 
   .hero__arch {
     width: min(90%, 800px);
-    margin: 3.5rem auto 0;
+    margin: 2.5rem auto 0;
   }
 
   .hero__arch svg {
@@ -120,12 +108,12 @@
     position: relative;
     max-width: var(--content-max);
     margin: 0 auto;
-    padding: 0 1.75rem 4.5rem;
+    padding: 3rem 1.75rem 4rem;
     width: 100%;
   }
 
   .hero__headline {
-    color: var(--canvas-50);
+    color: var(--pine-950);
     font-size: clamp(2rem, 5vw, 3.25rem);
     font-weight: 400;
     line-height: 1.08;
@@ -133,7 +121,7 @@
   }
 
   .hero__subhead {
-    color: var(--sage-200);
+    color: var(--pine-900);
     font-size: 1.125rem;
     max-width: 46ch;
     margin: 1.25rem 0 0;
@@ -156,14 +144,14 @@
   }
 
   @media (max-width: 640px) {
-    .hero {
-      min-height: 100vh;
+    .hero__photo-frame {
+      height: clamp(220px, 34vh, 340px);
     }
     .hero__arch text {
       font-size: 1.6rem;
     }
     .hero__arch {
-      margin-top: 2.25rem;
+      margin-top: 1.5rem;
     }
   }
 </style>
