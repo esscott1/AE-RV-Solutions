@@ -1,0 +1,112 @@
+---
+const markers = [
+  {
+    label: 'Power',
+    detail:
+      "Solar and battery sized for real use — coffee makers, laptops, and the furnace fan at 2am — without a generator running all night.",
+  },
+  {
+    label: 'Connectivity',
+    detail:
+      'A cellular and satellite setup that keeps a video call steady from a forest service road, not just a text message.',
+  },
+  {
+    label: 'Water & recharge',
+    detail:
+      'Freshwater and battery capacity built to outlast the trip, so the schedule is set by your family, not by the tank gauge.',
+  },
+];
+---
+
+<section class="convenience" id="capabilities">
+  <div class="convenience__inner">
+    <div class="convenience__copy">
+      <h2>The outdoors, without the trade-offs.</h2>
+      <p>
+        A trip into the backcountry usually means picking between the
+        places you actually want to be and the comforts you're used to
+        having. We build travel trailer systems that remove that choice —
+        real AC power, dependable internet, and enough self-contained
+        water and charging capacity that a remote Colorado overlook can
+        hold your family for a week, not just an overnight.
+      </p>
+      <p>
+        The trailer runs the way your house does. Lights stay on, phones
+        stay charged, and the kids can still finish homework — all
+        without a cord in sight.
+      </p>
+    </div>
+
+    <ul class="convenience__markers">
+      {
+        markers.map((m) => (
+          <li class="convenience__marker">
+            <h3>{m.label}</h3>
+            <p>{m.detail}</p>
+          </li>
+        ))
+      }
+    </ul>
+  </div>
+</section>
+
+<style>
+  .convenience {
+    background: var(--canvas-100);
+    padding: 5.5rem 1.75rem;
+  }
+
+  .convenience__inner {
+    max-width: var(--content-max);
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1.1fr 1fr;
+    gap: 3.5rem;
+    align-items: start;
+  }
+
+  .convenience__copy h2 {
+    font-size: clamp(1.75rem, 3.2vw, 2.4rem);
+    font-weight: 400;
+    line-height: 1.15;
+    max-width: 16ch;
+  }
+
+  .convenience__copy p {
+    max-width: var(--measure);
+    margin: 1.25rem 0 0;
+    color: var(--pine-900);
+  }
+
+  .convenience__markers {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-top: 1px solid var(--sage-200);
+  }
+
+  .convenience__marker {
+    padding: 1.6rem 0;
+    border-bottom: 1px solid var(--sage-200);
+  }
+
+  .convenience__marker h3 {
+    font-size: 1.05rem;
+    font-family: var(--font-body);
+    font-weight: 600;
+    color: var(--clay-700);
+  }
+
+  .convenience__marker p {
+    margin: 0.5rem 0 0;
+    color: var(--pine-900);
+    max-width: 42ch;
+  }
+
+  @media (max-width: 820px) {
+    .convenience__inner {
+      grid-template-columns: 1fr;
+      gap: 2.5rem;
+    }
+  }
+</style>
