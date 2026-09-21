@@ -67,11 +67,19 @@ npm run build     # outputs to dist/
 npm run preview   # serve the production build locally
 ```
 
-## Deployment (planned)
+## Deployment
 
-Per the architecture: GitHub repo connected to **AWS Amplify Hosting**
-(`us-east-1`). Push to `main` triggers a build (Vite builds the site,
-Amplify deploys to CloudFront); pull requests get preview deployments.
-Terraform for the Amplify app and supporting infrastructure lives in this
-repo's `infra/` (or equivalent) directory, module-per-feature, per
-`ae_rv_solutions_full_architecture.png`.
+The site can be deployed to **either AWS or Azure** — two independent,
+parallel Terraform stacks in [`infrastructure/`](../infrastructure)
+provision equivalent static hosting on each:
+
+- **AWS**: Amplify Hosting (`infrastructure/aws/`), fronted by CloudFront.
+- **Azure**: Static Web Apps (`infrastructure/azure/`), fronted by Front
+  Door.
+
+They're alternatives, not a dual-cloud deployment — you pick one hyperscaler
+to actually run. Either way, a GitHub Actions workflow builds the site
+(`npm run build` from this `site/` directory) and deploys on push to
+`main`; a push that only touches `infrastructure/**` never triggers a
+redeploy. See [`infrastructure/README.md`](../infrastructure/README.md)
+for the full setup and deploy steps for each cloud.

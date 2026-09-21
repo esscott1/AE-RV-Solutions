@@ -47,8 +47,12 @@ cloud" work without deleting the other's workflow.
 
 ## Deploying to AWS
 
-1. **AWS credentials**: configure the AWS CLI for the target account,
-   region `us-west-2`. Terraform ≥ 1.9.
+1. **AWS credentials**: configure the AWS CLI with an `OTS-Prod-Deploy`
+   named profile for the target account, region `us-west-2`
+   (`aws configure --profile OTS-Prod-Deploy`). Terraform ≥ 1.9. Both
+   `bootstrap` and `live/prod` default their `profile` variable to
+   `OTS-Prod-Deploy` — override with `-var profile=<name>` if you use a
+   different local profile name.
 2. **One-time: authorize the Amplify GitHub App.** In the AWS Amplify
    console, start "New app → Host web app → GitHub" and authorize the AWS
    Amplify GitHub App for the repo/account, then back out without finishing
