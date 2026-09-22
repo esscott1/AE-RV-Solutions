@@ -21,3 +21,9 @@ variable "github_access_token" {
   type        = string
   sensitive   = true
 }
+
+variable "domain_name" {
+  description = "Custom domain served by the Amplify app. Needs a default: terraform-aws.yml wires no TF_VAR_domain_name and there is no terraform.tfvars, so a required variable here would break the CI apply. Lowercase is functional, not cosmetic - Route 53 stores the zone as aervsolutions.com. and the Amplify association's domainName is lowercase regardless of input casing."
+  type        = string
+  default     = "aervsolutions.com"
+}

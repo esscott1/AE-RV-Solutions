@@ -18,3 +18,8 @@ output "webhook_url" {
   value       = aws_amplify_webhook.deploy.url
   sensitive   = true
 }
+
+output "domain_association_arn" {
+  description = "ARN of the custom domain association, or null when no domain is configured."
+  value       = one(aws_amplify_domain_association.this[*].arn)
+}

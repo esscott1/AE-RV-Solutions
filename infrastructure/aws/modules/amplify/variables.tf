@@ -37,3 +37,9 @@ variable "github_access_token" {
   type        = string
   sensitive   = true
 }
+
+variable "domain_name" {
+  description = "Custom domain to associate with the app, e.g. aervsolutions.com. Empty string disables the association entirely. Must be lowercase: Route 53 and the Amplify API both normalise to lowercase, so mixed case produces a permanent diff."
+  type        = string
+  default     = ""
+}

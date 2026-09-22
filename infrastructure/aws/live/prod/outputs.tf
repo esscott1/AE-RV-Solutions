@@ -13,3 +13,18 @@ output "webhook_url" {
   value       = module.amplify.webhook_url
   sensitive   = true
 }
+
+output "domain_url" {
+  description = "Live URL on the custom apex domain."
+  value       = "https://${var.domain_name}"
+}
+
+output "www_url" {
+  description = "Live URL on the www subdomain."
+  value       = "https://www.${var.domain_name}"
+}
+
+output "name_servers" {
+  description = "Route 53 nameservers for the zone. These must match the nameservers set at the GoDaddy registrar, or the domain stops resolving."
+  value       = aws_route53_zone.primary.name_servers
+}
