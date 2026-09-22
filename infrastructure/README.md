@@ -78,7 +78,15 @@ here on.
 
 1. **AWS credentials**: configure the AWS CLI with an `OTS-Prod-Deploy`
    named profile for the target account, region `us-west-2`
-   (`aws configure --profile OTS-Prod-Deploy`). Terraform ≥ 1.9.
+   (`aws configure --profile OTS-Prod-Deploy`). Terraform ≥ 1.9. For every
+   `terraform` command below run from your machine (not CI), set
+   `AWS_PROFILE=OTS-Prod-Deploy` in your shell first — both the provider
+   and the `live/prod` S3 backend pick it up automatically from there.
+   `bootstrap`'s provider block also defaults to this profile on its own
+   (`var.profile`), but `live/prod`'s backend config can't reference
+   Terraform variables, so it relies on the env var instead — deliberately
+   not hardcoded in `backend.hcl`, since that file is shared with CI, which
+   authenticates a different way (OIDC-assumed role, no named profile).
 2. **Bootstrap the state backend and CI trust role** (local state, run
    once):
    ```

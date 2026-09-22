@@ -80,10 +80,19 @@ data "aws_iam_policy_document" "github_actions_trust" {
     # subject (which every pull_request-triggered workflow in the repo
     # shares) - only a job that declares `environment: ${var.github_environment}`
     # can assume this role.
+    #
+    # StringLike (not StringEquals) because GitHub's actual sub claim was
+    # observed (via CloudTrail, after a real AssumeRoleWithWebIdentity
+    # AccessDenied) to be
+    # "repo:OWNER@<owner-id>/REPO@<repo-id>:environment:NAME" - the
+    # "immutable ID" format - not the plain "repo:OWNER/REPO:environment:NAME"
+    # the docs read for this project implied. The wildcards match both
+    # forms so this doesn't silently break if GitHub's default changes
+    # again.
     condition {
-      test     = "StringEquals"
+      test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.github_repository}:environment:${var.github_environment}"]
+      values   = ["repo:${split("/", var.github_repository)[0]}*/${split("/", var.github_repository)[1]}*:environment:${var.github_environment}"]
     }
   }
 }

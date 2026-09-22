@@ -10,4 +10,11 @@ dynamodb_table = "ae-rv-solutions-tfstate-lock"
 region         = "us-west-2"
 key            = "live/prod/terraform.tfstate"
 encrypt        = true
-profile        = "OTS-Prod-Deploy"
+# No `profile` here on purpose: this file is shared between local runs and
+# CI. Backend blocks can't reference Terraform variables (unlike the
+# provider block's conditional `var.profile`), so a hardcoded profile here
+# would break CI the same way it broke the provider block. For local runs,
+# set AWS_PROFILE=OTS-Prod-Deploy in your shell before running terraform -
+# both the backend and the provider fall back to it automatically. CI
+# needs nothing extra: the OIDC-assumed role's credentials are already in
+# the environment.
