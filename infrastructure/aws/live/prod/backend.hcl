@@ -5,8 +5,8 @@
 #   terraform -chdir=../../bootstrap output -raw lock_table_name
 #   terraform -chdir=../../bootstrap output -raw region
 
-bucket         = "REPLACE_WITH_state_bucket_name_OUTPUT"
-dynamodb_table = "REPLACE_WITH_lock_table_name_OUTPUT"
+bucket         = "ae-rv-solutions-tfstate-998976076628"
+dynamodb_table = "ae-rv-solutions-tfstate-lock"
 region         = "us-west-2"
 key            = "live/prod/terraform.tfstate"
 encrypt        = true
