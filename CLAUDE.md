@@ -28,9 +28,13 @@ Domain: aervsolutions.com (registered with GoDaddy, DNS pointing to AWS Amplify)
 
 ## Infrastructure as code
 - Tool: Terraform
-- Module structure: amplify/, contact/, library/, chatbot/, telegram/
-- State backend: S3 + DynamoDB lock table
-- Region: us-east-1
+- Location: `infrastructure/aws/` (bootstrap/, modules/, live/prod/)
+- Module structure: amplify/ today; contact/, library/, chatbot/, telegram/
+  as those features get built
+- State backend: S3 with native lockfile (`use_lockfile = true`, Terraform
+  >= 1.10). The DynamoDB lock table still exists from bootstrap but is no
+  longer used.
+- Region: us-west-2
 
 ## Safety requirement
 Any chat response touching live electrical, battery gas/swelling, or
@@ -75,10 +79,21 @@ There is no test suite or linter configured yet.
   available yet, use a CSS placeholder (as `Hero.astro` currently does) and
   leave a note for swapping it in, rather than committing a stand-in image.
 
-## Deployment (planned)
+## Deployment
 
-GitHub repo connected to AWS Amplify Hosting (`us-west-2`). Push to `main`
-triggers a build; pull requests get preview deployments. Infrastructure is
-planned to live in Terraform under an `infra/` directory, module-per-feature.
-Nothing here is provisioned yet — treat deployment/infra instructions as
-forward-looking, not current state.
+Provisioned and live in `us-west-2`. Both the infrastructure and the site
+deploy through GitHub Actions, never through a cloud-native push trigger:
+
+- `terraform-aws.yml` runs `terraform apply`, gated to merged PRs touching
+  `infrastructure/aws/live/**` or `infrastructure/aws/modules/**`, and
+  authenticates via OIDC (no stored AWS keys).
+- `deploy-site.yml` is gated to pushes touching `site/**`. It reads
+  `infrastructure/deploy-targets.yml` and POSTs an Amplify webhook.
+
+Amplify's own build trigger is deliberately disabled
+(`enable_auto_build = false`), because its monorepo path filtering has open
+bug reports of building on every commit regardless of path. There are no
+pull request preview deployments.
+
+Both workflow triggers are path **allow-lists**, so a change outside those
+paths deploys nothing.
