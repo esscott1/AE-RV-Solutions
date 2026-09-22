@@ -31,32 +31,32 @@ src/
   styles/
     global.css             # color tokens, type tokens, base element styles
   assets/
-    (hero photo goes here — see below)
+    heroImage.jpg          # hero banner photo — see below
 ```
 
 ## Replacing the hero photo
 
-The hero currently renders a **placeholder gradient** standing in for the
-real photograph (a family at a remote, off-grid Colorado campsite next to a
-Grand Design travel trailer, dusk lighting). No AI-generated or stock photo
-is embedded in this build, to keep the repo clean of placeholder imagery
-that would need to be replaced anyway and to avoid stock-license ambiguity.
+`src/assets/heroImage.jpg` is rendered by `src/components/Hero.astro`
+through Astro's `<Image>` component, which generates responsive WebP
+variants at build time (the ~850KB source ships as roughly 30–170KB
+depending on viewport).
 
-To swap in the real photo:
+To swap in a different photo, drop it in at the same path and filename —
+no code changes needed. If you rename it, update the `import` at the top
+of `Hero.astro` to match.
 
-1. Add the licensed/approved photo to `src/assets/hero-camping.jpg` (or
-   `.webp` — prefer `.webp` for file size once you have a final crop).
-2. In `src/components/Hero.astro`, add at the top of the frontmatter:
-   ```astro
-   ---
-   import heroImage from '../assets/hero-camping.jpg';
-   ---
-   ```
-3. Uncomment the `<img>` block in the template and delete the
-   `<div class="hero__photo hero__photo--placeholder">` line below it.
-4. Suggested crop/composition: family and trailer in the lower third,
-   open sky and ridgeline in the upper two-thirds (the arched name and
-   scrim are tuned for a photo with open sky at the top).
+What to give it:
+
+- **1920 × 600px** recommended (minimum 1600 × 500). The `<Image>` call
+  requests widths up to 1920, so a narrower source gets upscaled.
+- **Landscape.** The banner is short and full-width
+  (`clamp(280px, 42vh, 460px)` tall, less on mobile), so a tall or square
+  photo loses most of its content to the crop.
+- **Keep the top ~25% visually calm.** `object-position: center 40%`
+  weights the crop toward the upper part of the frame, which is also
+  where the arched "A&E RV Solutions" title sits. A darker treeline or
+  ridge there gives the text something to read against; bright sky or
+  busy detail fights the scrim (only ~45% opacity at the top).
 
 ## Development
 
