@@ -139,6 +139,37 @@ data "aws_iam_policy_document" "github_actions_terraform" {
     actions   = ["amplify:*"]
     resources = ["*"]
   }
+
+  # Two distinct needs are covered here. The first block of actions lets
+  # Terraform manage the hosted zone resource itself. The rest are needed
+  # because Amplify Hosting has no service-linked role and uses forward
+  # access sessions - so when it writes the domain's validation and routing
+  # records, that write is authorized against THIS role, not against a role
+  # of Amplify's own.
+  #
+  # Route 53 is a global service: these must not be region-scoped.
+  #
+  # No acm:* actions are needed. The certificate is AMPLIFY_MANAGED
+  # (confirmed live), and AWS's own AdministratorAccess-Amplify policy
+  # likewise contains no ACM actions.
+  statement {
+    sid    = "ManageRoute53"
+    effect = "Allow"
+    actions = [
+      "route53:CreateHostedZone",
+      "route53:GetHostedZone",
+      "route53:ListHostedZones",
+      "route53:ListHostedZonesByName",
+      "route53:ListTagsForResource",
+      "route53:ChangeTagsForResource",
+      "route53:UpdateHostedZoneComment",
+      "route53:DeleteHostedZone",
+      "route53:GetChange",
+      "route53:ListResourceRecordSets",
+      "route53:ChangeResourceRecordSets",
+    ]
+    resources = ["*"]
+  }
 }
 
 resource "aws_iam_role_policy" "github_actions_terraform" {

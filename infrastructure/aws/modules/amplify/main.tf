@@ -68,3 +68,40 @@ resource "aws_amplify_webhook" "deploy" {
   branch_name = aws_amplify_branch.this.branch_name
   description = "Triggered by .github/workflows/deploy-site.yml on pushes to ${var.branch_name} that touch site/."
 }
+
+# Imported, not created - the association already exists in AWS and is
+# AVAILABLE. Only app_id and domain_name are ForceNew on this resource, and
+# both match live exactly, so no field below can trigger a replacement
+# (which would drop the live domain and re-issue the certificate).
+resource "aws_amplify_domain_association" "this" {
+  count = var.domain_name != "" ? 1 : 0
+
+  app_id      = aws_amplify_app.this.id
+  domain_name = var.domain_name
+
+  # Apex. The AWS API omits `prefix` entirely for the root subdomain, but
+  # the Terraform argument is Required and explicitly permits "" - so it is
+  # written rather than omitted.
+  sub_domain {
+    branch_name = aws_amplify_branch.this.branch_name
+    prefix      = ""
+  }
+
+  sub_domain {
+    branch_name = aws_amplify_branch.this.branch_name
+    prefix      = "www"
+  }
+
+  enable_auto_sub_domain = false
+
+  # Confirmed live via `aws amplify get-domain-association` (CLI 2.37.0,
+  # which returns the `certificate` field that older CLIs omitted).
+  certificate_settings {
+    type = "AMPLIFY_MANAGED"
+  }
+
+  # Creation already waits unconditionally (5m). This second wait is a
+  # hardcoded 15m with no configurable `timeouts` block, so leaving it on
+  # risks red CI runs for reasons unrelated to the change being applied.
+  wait_for_verification = false
+}
