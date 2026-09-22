@@ -17,7 +17,7 @@ jobs:
       # env var above and checked here instead.
       - name: Checkout
         if: ${{ env.AZURE_STATIC_WEB_APPS_API_TOKEN != '' }}
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Deploy to Azure Static Web Apps
         if: ${{ env.AZURE_STATIC_WEB_APPS_API_TOKEN != '' }}

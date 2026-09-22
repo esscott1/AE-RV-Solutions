@@ -43,6 +43,13 @@ resource "aws_amplify_app" "this" {
   build_spec               = local.build_spec
   environment_variables    = local.environment_variables
   enable_branch_auto_build = false
+
+  lifecycle {
+    # AWS never returns the token back, so every plan would otherwise show
+    # a spurious in-place update of access_token. Rotating the token means
+    # updating the secret and removing this ignore for one apply.
+    ignore_changes = [access_token]
+  }
 }
 
 resource "aws_amplify_branch" "this" {
@@ -59,5 +66,5 @@ resource "aws_amplify_branch" "this" {
 resource "aws_amplify_webhook" "deploy" {
   app_id      = aws_amplify_app.this.id
   branch_name = aws_amplify_branch.this.branch_name
-  description = "Triggered by .github/workflows/deploy.yml on pushes to ${var.branch_name} that touch site/."
+  description = "Triggered by .github/workflows/deploy-aws.yml on pushes to ${var.branch_name} that touch site/."
 }

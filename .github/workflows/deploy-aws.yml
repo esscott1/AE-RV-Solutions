@@ -3,8 +3,12 @@ name: Deploy (AWS)
 on:
   push:
     branches: [main]
-    paths-ignore:
-      - "infrastructure/**"
+    # Allow-list rather than deny-list: only site content triggers a
+    # rebuild. The previous `paths-ignore: infrastructure/**` also fired
+    # for root-level edits (CLAUDE.md, .github/**, etc.), which rebuilt
+    # and redeployed byte-identical site content for nothing.
+    paths:
+      - "site/**"
 
 jobs:
   trigger-amplify-build:

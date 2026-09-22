@@ -25,10 +25,12 @@ Each stack has the same shape:
 
 The site lives in `site/`, and infrastructure changes live in
 `infrastructure/`, in the same repo. Whichever cloud you use, a push to
-`main` that only touches `infrastructure/**` must **never** trigger a
-rebuild/redeploy of the site. Both `.github/workflows/deploy-*.yml`
-workflows are gated with `paths-ignore: ["infrastructure/**"]`, so that's
-enforced the same way regardless of cloud.
+`main` that doesn't touch the site must **never** trigger a
+rebuild/redeploy of it. `deploy-aws.yml` is gated with
+`paths: ["site/**"]` — an allow-list, so *only* site content deploys.
+(`deploy-azure.yml` still uses the older `paths-ignore:
+["infrastructure/**"]` deny-list; worth tightening to match whenever the
+Azure path gets picked back up.)
 
 - **AWS**: Amplify's own push trigger (`enable_auto_build`) is disabled
   entirely — its documented "monorepo app root" build-trigger filtering has
@@ -55,7 +57,7 @@ change:
 |---|---|---|
 | `terraform-aws.yml` | `infrastructure/aws/live/**`, `infrastructure/aws/modules/**` | Runs `terraform apply` against AWS, authenticated via OIDC (no stored keys) |
 | `deploy-site.yml` | `site/**` | Reads [`deploy-targets.yml`](deploy-targets.yml) and confirms AWS is a configured target (currently a no-op confirmation — see below) |
-| `deploy-aws.yml` | any push to `main` except `infrastructure/**` | POSTs to the Amplify webhook — this is the actual site deploy trigger |
+| `deploy-aws.yml` | any push to `main` touching `site/**` | POSTs to the Amplify webhook — this is the actual site deploy trigger |
 
 `infrastructure/aws/bootstrap/**` deliberately isn't in `terraform-aws.yml`'s
 path filter — `bootstrap` stays a local, one-time step (see below), since
@@ -94,11 +96,18 @@ here on.
    terraform init
    terraform apply
    ```
-   This creates the S3 state bucket, the DynamoDB lock table, and an IAM
-   role (`github-actions-terraform`) that `terraform-aws.yml` assumes via
+   This creates the S3 state bucket, a DynamoDB table, and an IAM role
+   (`github-actions-terraform`) that `terraform-aws.yml` assumes via
    OIDC — no AWS access keys are ever stored as GitHub secrets.
+
+   Note: the DynamoDB table is **no longer used**. `live/prod`'s backend
+   now uses S3's native locking (`use_lockfile = true`, Terraform ≥ 1.10),
+   which writes a `.tflock` object beside the state file and replaces the
+   deprecated `dynamodb_table` backend parameter. The table resource is
+   still in `bootstrap` so switching locking mechanisms didn't destroy
+   infrastructure in the same change; it can be removed in a later pass.
 3. Fill in `infrastructure/aws/live/prod/backend.hcl` with the
-   `state_bucket_name` and `lock_table_name` outputs from step 2.
+   `state_bucket_name` output from step 2 (no lock table needed).
 4. **Create the GitHub Environment** `aws-infra` (repo Settings →
    Environments → New environment). This is what the IAM role's trust
    policy is scoped to — only a job that declares
