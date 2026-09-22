@@ -1,8 +1,12 @@
 # Controls which cloud(s) the site deploys to. Read by
-# .github/workflows/deploy-site.yml on every merged PR touching site/.
+# .github/workflows/deploy-site.yml on every push to main touching site/.
 #
-# Only `aws` is actually read right now. `azure` is reserved for later -
-# no workflow parses it yet, and flipping it here does nothing until one
-# does.
+# Each flag gates that cloud's deploy job. Flip a flag to turn a cloud's
+# deploys on or off - no workflow edits needed. Both can be true at once
+# (e.g. running side by side during a migration).
+#
+# A cloud whose flag is true also needs its deploy secret set
+# (AMPLIFY_WEBHOOK_URL / AZURE_STATIC_WEB_APPS_API_TOKEN), or the job fails
+# with an explicit error rather than skipping silently.
 aws: true
 azure: false
