@@ -94,11 +94,18 @@ here on.
    terraform init
    terraform apply
    ```
-   This creates the S3 state bucket, the DynamoDB lock table, and an IAM
-   role (`github-actions-terraform`) that `terraform-aws.yml` assumes via
+   This creates the S3 state bucket, a DynamoDB table, and an IAM role
+   (`github-actions-terraform`) that `terraform-aws.yml` assumes via
    OIDC — no AWS access keys are ever stored as GitHub secrets.
+
+   Note: the DynamoDB table is **no longer used**. `live/prod`'s backend
+   now uses S3's native locking (`use_lockfile = true`, Terraform ≥ 1.10),
+   which writes a `.tflock` object beside the state file and replaces the
+   deprecated `dynamodb_table` backend parameter. The table resource is
+   still in `bootstrap` so switching locking mechanisms didn't destroy
+   infrastructure in the same change; it can be removed in a later pass.
 3. Fill in `infrastructure/aws/live/prod/backend.hcl` with the
-   `state_bucket_name` and `lock_table_name` outputs from step 2.
+   `state_bucket_name` output from step 2 (no lock table needed).
 4. **Create the GitHub Environment** `aws-infra` (repo Settings →
    Environments → New environment). This is what the IAM role's trust
    policy is scoped to — only a job that declares
