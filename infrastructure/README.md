@@ -25,10 +25,12 @@ Each stack has the same shape:
 
 The site lives in `site/`, and infrastructure changes live in
 `infrastructure/`, in the same repo. Whichever cloud you use, a push to
-`main` that only touches `infrastructure/**` must **never** trigger a
-rebuild/redeploy of the site. Both `.github/workflows/deploy-*.yml`
-workflows are gated with `paths-ignore: ["infrastructure/**"]`, so that's
-enforced the same way regardless of cloud.
+`main` that doesn't touch the site must **never** trigger a
+rebuild/redeploy of it. `deploy-aws.yml` is gated with
+`paths: ["site/**"]` — an allow-list, so *only* site content deploys.
+(`deploy-azure.yml` still uses the older `paths-ignore:
+["infrastructure/**"]` deny-list; worth tightening to match whenever the
+Azure path gets picked back up.)
 
 - **AWS**: Amplify's own push trigger (`enable_auto_build`) is disabled
   entirely — its documented "monorepo app root" build-trigger filtering has
@@ -55,7 +57,7 @@ change:
 |---|---|---|
 | `terraform-aws.yml` | `infrastructure/aws/live/**`, `infrastructure/aws/modules/**` | Runs `terraform apply` against AWS, authenticated via OIDC (no stored keys) |
 | `deploy-site.yml` | `site/**` | Reads [`deploy-targets.yml`](deploy-targets.yml) and confirms AWS is a configured target (currently a no-op confirmation — see below) |
-| `deploy-aws.yml` | any push to `main` except `infrastructure/**` | POSTs to the Amplify webhook — this is the actual site deploy trigger |
+| `deploy-aws.yml` | any push to `main` touching `site/**` | POSTs to the Amplify webhook — this is the actual site deploy trigger |
 
 `infrastructure/aws/bootstrap/**` deliberately isn't in `terraform-aws.yml`'s
 path filter — `bootstrap` stays a local, one-time step (see below), since
