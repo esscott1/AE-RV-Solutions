@@ -45,15 +45,61 @@ Both workflow files always exist; only the one whose secret you've set
 actually deploys (each has a no-op guard step). That's what makes "pick one
 cloud" work without deleting the other's workflow.
 
+## Where each piece of automation runs
+
+Three separate GitHub Actions workflows exist for AWS, each gated to a
+different set of changed paths so they never fire for the wrong kind of
+change:
+
+| Workflow | Triggers on a merged PR touching... | What it does |
+|---|---|---|
+| `terraform-aws.yml` | `infrastructure/aws/live/**`, `infrastructure/aws/modules/**` | Runs `terraform apply` against AWS, authenticated via OIDC (no stored keys) |
+| `deploy-site.yml` | `site/**` | Reads [`deploy-targets.yml`](deploy-targets.yml) and confirms AWS is a configured target (currently a no-op confirmation — see below) |
+| `deploy-aws.yml` | any push to `main` except `infrastructure/**` | POSTs to the Amplify webhook — this is the actual site deploy trigger |
+
+`infrastructure/aws/bootstrap/**` deliberately isn't in `terraform-aws.yml`'s
+path filter — `bootstrap` stays a local, one-time step (see below), since
+it creates the very state backend and CI trust role that `terraform-aws.yml`
+depends on.
+
+`deploy-targets.yml` is meant to eventually control which cloud(s) the site
+deploys to, but only its `aws` key is read anywhere today — `azure: false`
+is inert, reserved for when Azure's site-deploy path is built out.
+`deploy-site.yml`'s AWS job is a confirmation step, not a second deploy
+path: the real deploy already happens via `deploy-aws.yml`'s webhook call
+on the same merge (not Amplify's native build trigger, which is disabled —
+see above).
+
 ## Deploying to AWS
+
+`bootstrap` stays local/manual (run from your machine, once). Everything
+else — `live/prod` applies and site deploys — runs in GitHub Actions from
+here on.
 
 1. **AWS credentials**: configure the AWS CLI with an `OTS-Prod-Deploy`
    named profile for the target account, region `us-west-2`
-   (`aws configure --profile OTS-Prod-Deploy`). Terraform ≥ 1.9. Both
-   `bootstrap` and `live/prod` default their `profile` variable to
-   `OTS-Prod-Deploy` — override with `-var profile=<name>` if you use a
-   different local profile name.
-2. **One-time: authorize the Amplify GitHub App.** In the AWS Amplify
+   (`aws configure --profile OTS-Prod-Deploy`). Terraform ≥ 1.9.
+2. **Bootstrap the state backend and CI trust role** (local state, run
+   once):
+   ```
+   cd infrastructure/aws/bootstrap
+   terraform init
+   terraform apply
+   ```
+   This creates the S3 state bucket, the DynamoDB lock table, and an IAM
+   role (`github-actions-terraform`) that `terraform-aws.yml` assumes via
+   OIDC — no AWS access keys are ever stored as GitHub secrets.
+3. Fill in `infrastructure/aws/live/prod/backend.hcl` with the
+   `state_bucket_name` and `lock_table_name` outputs from step 2.
+4. **Create the GitHub Environment** `aws-infra` (repo Settings →
+   Environments → New environment). This is what the IAM role's trust
+   policy is scoped to — only a job that declares
+   `environment: aws-infra` can assume it. Optionally add a required
+   reviewer here for a manual approval gate before `terraform apply` runs.
+5. **Add a repo variable** (Settings → Secrets and variables → Actions →
+   Variables) named `AWS_TERRAFORM_ROLE_ARN`, set to the
+   `github_actions_role_arn` output from step 2.
+6. **One-time: authorize the Amplify GitHub App.** In the AWS Amplify
    console, start "New app → Host web app → GitHub" and authorize the AWS
    Amplify GitHub App for the repo/account, then back out without finishing
    app creation. This registers the connection that `aws_amplify_app`
@@ -67,29 +113,20 @@ cloud" work without deleting the other's workflow.
    API behavior — if `terraform apply` fails while setting up the
    repository/webhook, the fallback is to pass a personal access token via
    `access_token` on `aws_amplify_app` instead.
-3. **Bootstrap the state backend** (local state, run once):
+7. **Provision hosting**: open a PR that touches
+   `infrastructure/aws/live/**` and merge it. `terraform-aws.yml` runs and
+   applies — this creates the real Amplify app.
+8. **Wire up the site deploy trigger** (one time):
    ```
-   cd infrastructure/aws/bootstrap
-   terraform init
-   terraform apply
-   ```
-4. Fill in `infrastructure/aws/live/prod/backend.hcl` with the
-   `state_bucket_name` and `lock_table_name` outputs from step 3.
-5. **Provision hosting**:
-   ```
-   cd infrastructure/aws/live/prod
-   terraform init -backend-config=backend.hcl
-   terraform plan
-   terraform apply
-   ```
-6. **Wire up the deploy trigger** (one time):
-   ```
-   terraform output -raw webhook_url
+   terraform -chdir=infrastructure/aws/live/prod output -raw webhook_url
    gh secret set AMPLIFY_WEBHOOK_URL --body "<value from above>"
    ```
-7. **Verify**: push a change under `site/` to `main` and confirm the
-   `Deploy (AWS)` workflow runs and Amplify builds. Push a change touching
-   only `infrastructure/**` and confirm the workflow does not run.
+9. **Verify**: merge a PR touching `site/` and confirm `deploy-site.yml`
+   (confirmation) and `deploy-aws.yml` (the actual build) both run, and the
+   site goes live at `terraform -chdir=infrastructure/aws/live/prod output
+   -raw site_url`. Merge a PR touching only `infrastructure/aws/**` and
+   confirm only `terraform-aws.yml` runs — neither site-deploy workflow
+   does.
 
 ## Deploying to Azure
 

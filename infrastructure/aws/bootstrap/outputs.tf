@@ -12,3 +12,8 @@ output "region" {
   description = "AWS region the state backend resources live in. Use as `region` in live/*/backend.hcl."
   value       = var.region
 }
+
+output "github_actions_role_arn" {
+  description = "IAM role terraform-aws.yml assumes via OIDC. Set as the AWS_TERRAFORM_ROLE_ARN repository variable (Settings -> Secrets and variables -> Actions -> Variables)."
+  value       = aws_iam_role.github_actions_terraform.arn
+}

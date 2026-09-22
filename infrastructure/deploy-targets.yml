@@ -1,0 +1,8 @@
+# Controls which cloud(s) the site deploys to. Read by
+# .github/workflows/deploy-site.yml on every merged PR touching site/.
+#
+# Only `aws` is actually read right now. `azure` is reserved for later -
+# no workflow parses it yet, and flipping it here does nothing until one
+# does.
+aws: true
+azure: false

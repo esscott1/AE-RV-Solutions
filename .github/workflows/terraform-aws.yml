@@ -1,0 +1,45 @@
+name: Terraform (AWS)
+
+on:
+  pull_request:
+    branches: [main]
+    types: [closed]
+    paths:
+      # Deliberately not a blanket infrastructure/aws/**: bootstrap/ stays
+      # a manual, local, one-time step (it creates the state backend and
+      # the OIDC role this workflow assumes) and should never auto-apply.
+      - "infrastructure/aws/live/**"
+      - "infrastructure/aws/modules/**"
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.merged == true
+    environment: aws-infra
+    defaults:
+      run:
+        working-directory: infrastructure/aws/live/prod
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_TERRAFORM_ROLE_ARN }}
+          aws-region: us-west-2
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform init
+        run: terraform init -input=false -backend-config=backend.hcl
+
+      - name: Terraform apply
+        # profile="" disables the local-named-profile default (OTS-Prod-Deploy);
+        # CI authenticates via the OIDC role assumed above instead.
+        run: terraform apply -input=false -auto-approve -var profile=""

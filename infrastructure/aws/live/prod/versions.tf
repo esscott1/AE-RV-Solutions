@@ -12,6 +12,9 @@ terraform {
 }
 
 provider "aws" {
-  region  = var.region
-  profile = var.profile
+  region = var.region
+  # Empty string (CI passes -var profile="") means "no named profile" -
+  # rely on ambient credentials instead (OIDC-injected env vars in CI,
+  # or the default profile locally).
+  profile = var.profile != "" ? var.profile : null
 }
