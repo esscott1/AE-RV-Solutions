@@ -9,8 +9,8 @@ import heroImage from '../assets/heroImage.jpg';
       src={heroImage}
       alt="A family relaxes outside their Grand Design travel trailer at a remote, off-grid campsite in the Colorado backcountry, mountains rising behind them at dusk."
       class="hero__photo"
-      widths={[640, 960, 1440, 1920]}
-      sizes="100vw"
+      widths={[640, 928, 1392, 1856]}
+      sizes="80vw"
       loading="eager"
       fetchpriority="high"
     />
@@ -49,25 +49,24 @@ import heroImage from '../assets/heroImage.jpg';
 
   .hero__photo-frame {
     position: relative;
-    height: clamp(280px, 42vh, 460px);
-    overflow: hidden;
+    /* The photo is 80% of the viewport and shrinks with it. No fixed height:
+       the frame takes its height from the image itself, so the full frame is
+       always shown at its native aspect ratio and nothing is ever cropped. */
+    width: var(--content-width);
+    margin-inline: auto;
     isolation: isolate;
   }
 
   .hero__photo {
-    position: absolute;
-    inset: 0;
+    display: block;
     width: 100%;
-    height: 100%;
-    object-fit: cover;
-    object-position: center 40%;
-    z-index: -2;
+    height: auto;
   }
 
   .hero__scrim {
     position: absolute;
     inset: 0;
-    z-index: -1;
+    z-index: 1;
     background: linear-gradient(
       180deg,
       rgba(14, 21, 18, 0.45) 0%,
@@ -78,8 +77,14 @@ import heroImage from '../assets/heroImage.jpg';
   }
 
   .hero__arch {
+    /* Overlaid rather than in flow: the image now sets the frame's height,
+       so an in-flow arch would stack below it instead of sitting on it. */
+    position: absolute;
+    inset-inline: 0;
+    top: 2.5rem;
+    z-index: 2;
     width: min(90%, 800px);
-    margin: 2.5rem auto 0;
+    margin-inline: auto;
   }
 
   .hero__arch svg {
@@ -106,10 +111,11 @@ import heroImage from '../assets/heroImage.jpg';
 
   .hero__content {
     position: relative;
-    max-width: var(--content-max);
-    margin: 0 auto;
-    padding: 3rem 1.75rem 4rem;
-    width: 100%;
+    /* Horizontal padding stays at 0 so the column's own edges - not padding
+       inside a wider box - are what line up with the photo above. */
+    width: var(--content-width);
+    margin-inline: auto;
+    padding: 3rem 0 4rem;
   }
 
   .hero__headline {
@@ -144,14 +150,11 @@ import heroImage from '../assets/heroImage.jpg';
   }
 
   @media (max-width: 640px) {
-    .hero__photo-frame {
-      height: clamp(220px, 34vh, 340px);
-    }
     .hero__arch text {
       font-size: 1.6rem;
     }
     .hero__arch {
-      margin-top: 1.5rem;
+      top: 1.5rem;
     }
   }
 </style>

@@ -53,12 +53,14 @@ const markers = [
 <style>
   .convenience {
     background: var(--canvas-100);
-    padding: 5.5rem 1.75rem;
+    /* Full-bleed band, but no horizontal padding - the inner column alone
+       sets the text edges so they match the hero photo. */
+    padding: 5.5rem 0;
   }
 
   .convenience__inner {
-    max-width: var(--content-max);
-    margin: 0 auto;
+    width: var(--content-width);
+    margin-inline: auto;
     display: grid;
     grid-template-columns: 1.1fr 1fr;
     gap: 3.5rem;
