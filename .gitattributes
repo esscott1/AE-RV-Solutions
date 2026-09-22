@@ -1,0 +1,12 @@
+# Terraform config must check out with LF, even on Windows.
+#
+# Without this, core.autocrlf=true rewrites .tf files to CRLF on checkout.
+# The Amplify build_spec is built from a heredoc in
+# infrastructure/aws/modules/amplify/main.tf, so a CRLF working copy renders
+# a CRLF build spec while AWS stores LF - every line then shows as changed
+# in a local plan even though the content is identical. Worse, a local
+# `terraform apply` from Windows would push the CRLF version and the next CI
+# run (Linux, LF) would flip it straight back.
+*.tf      text eol=lf
+*.tfvars  text eol=lf
+*.hcl     text eol=lf
