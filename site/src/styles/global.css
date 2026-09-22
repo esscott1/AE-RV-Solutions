@@ -14,7 +14,10 @@
   --font-display: 'Fraunces', 'Iowan Old Style', serif;
   --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
 
-  --content-max: 72rem;
+  /* Every content column uses this width, centered, so all text shares the
+     hero photo's left and right edges. Change it in one place and the photo
+     and the copy stay aligned. */
+  --content-width: 80%;
   --measure: 62ch;
 }
 

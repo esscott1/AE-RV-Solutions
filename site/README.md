@@ -45,18 +45,24 @@ To swap in a different photo, drop it in at the same path and filename —
 no code changes needed. If you rename it, update the `import` at the top
 of `Hero.astro` to match.
 
+The banner is **never cropped**: it renders at 80% of the viewport width
+with `height: auto`, so the whole frame is always visible at its native
+aspect ratio and simply scales down on narrower screens.
+
 What to give it:
 
-- **1920 × 600px** recommended (minimum 1600 × 500). The `<Image>` call
-  requests widths up to 1920, so a narrower source gets upscaled.
-- **Landscape.** The banner is short and full-width
-  (`clamp(280px, 42vh, 460px)` tall, less on mobile), so a tall or square
-  photo loses most of its content to the crop.
-- **Keep the top ~25% visually calm.** `object-position: center 40%`
-  weights the crop toward the upper part of the frame, which is also
-  where the arched "A&E RV Solutions" title sits. A darker treeline or
-  ridge there gives the text something to read against; bright sky or
-  busy detail fights the scrim (only ~45% opacity at the top).
+- **Aspect ratio is yours to choose** — whatever you supply is what gets
+  shown, uncropped. The current photo is 1856 × 576 (≈3.2:1). A much
+  squarer photo will render proportionally taller and push the page
+  content further down, so keep it wide/panoramic.
+- **~1856px wide or more.** At 80% of the viewport, a 2560px-wide display
+  renders the banner around 2048px, so a wider source avoids upscaling.
+  If you change the source's pixel width, update the `widths={[...]}` array
+  in `Hero.astro` to match (values above the source width are skipped).
+- **Keep the top ~25% visually calm.** The arched "A&E RV Solutions" title
+  is overlaid across the top of the frame. A darker treeline or ridge there
+  gives the text something to read against; bright sky or busy detail
+  fights the scrim (only ~45% opacity at the top).
 
 ## Development
 
