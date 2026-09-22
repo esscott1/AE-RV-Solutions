@@ -31,3 +31,9 @@ variable "build_spec" {
   type        = string
   default     = null
 }
+
+variable "github_access_token" {
+  description = "GitHub personal access token (classic; repo + admin:repo_hook scopes) Amplify uses to create the app's repository connection and webhook. Required: the Amplify CreateApp API always needs an explicit token, even when the AWS Amplify GitHub App has already been authorized in the console for this account - that authorization only carries over automatically within the console's own browser session, not for API/Terraform-driven app creation."
+  type        = string
+  sensitive   = true
+}

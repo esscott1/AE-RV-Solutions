@@ -29,15 +29,16 @@ locals {
 }
 
 resource "aws_amplify_app" "this" {
-  # No access_token/oauth_token: this assumes the AWS Amplify GitHub App has
-  # already been authorized once for this GitHub account (a manual, one-time
-  # step in the Amplify console — see infrastructure/README.md) and that a
-  # newly Terraform-created app can reuse that connection. If `terraform
-  # apply` fails at repository/webhook setup, fall back to a personal
-  # access token via var access_token/oauth_token instead.
-  name       = var.app_name
-  repository = var.repository_url
-  platform   = "WEB"
+  # access_token is required: confirmed by a real CreateApp failure
+  # ("You should at least provide one valid token") that the Amplify GitHub
+  # App console authorization (infrastructure/README.md) does NOT carry
+  # over to API/Terraform-driven app creation - that reuse only happens
+  # within the console's own browser session. A token is always needed
+  # here regardless of prior console authorization.
+  name         = var.app_name
+  repository   = var.repository_url
+  access_token = var.github_access_token
+  platform     = "WEB"
 
   build_spec               = local.build_spec
   environment_variables    = local.environment_variables

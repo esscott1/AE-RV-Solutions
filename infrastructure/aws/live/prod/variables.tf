@@ -15,3 +15,9 @@ variable "repository_url" {
   type        = string
   default     = "https://github.com/esscott1/AE-RV-Solutions"
 }
+
+variable "github_access_token" {
+  description = "GitHub personal access token (classic; repo + admin:repo_hook scopes) Amplify uses to create the app's repository connection and webhook. Pass via -var or TF_VAR_github_access_token - never commit a real value here."
+  type        = string
+  sensitive   = true
+}
