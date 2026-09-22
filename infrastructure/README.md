@@ -107,20 +107,21 @@ here on.
 5. **Add a repo variable** (Settings → Secrets and variables → Actions →
    Variables) named `AWS_TERRAFORM_ROLE_ARN`, set to the
    `github_actions_role_arn` output from step 2.
-6. **One-time: authorize the Amplify GitHub App.** In the AWS Amplify
-   console, start "New app → Host web app → GitHub" and authorize the AWS
-   Amplify GitHub App for the repo/account, then back out without finishing
-   app creation. This registers the connection that `aws_amplify_app`
-   reuses — Terraform can't drive this OAuth handshake. Skip if already
-   connected from a prior project.
-
-   Note: `aws/modules/amplify/main.tf`'s `aws_amplify_app` resource
-   intentionally omits `access_token`/`oauth_token`, assuming a
-   Terraform-created app can reuse an existing Console-authorized GitHub
-   App connection. This hasn't been independently confirmed against AWS's
-   API behavior — if `terraform apply` fails while setting up the
-   repository/webhook, the fallback is to pass a personal access token via
-   `access_token` on `aws_amplify_app` instead.
+6. **Generate a GitHub token for Amplify** and add it as a repo secret.
+   Confirmed by a real `terraform apply` failure (`BadRequestException:
+   You should at least provide one valid token`): the Amplify `CreateApp`
+   API always needs an explicit token — authorizing the AWS Amplify GitHub
+   App in the console does **not** carry over to an API/Terraform-driven
+   app creation, only to app creation started from within the console's
+   own browser session. So:
+   - GitHub → Settings → Developer settings → Personal access tokens →
+     Tokens (classic) → Generate new token. Scopes: `repo` (full) and
+     `admin:repo_hook`.
+   - `gh secret set AMPLIFY_GITHUB_TOKEN --body "<the token>"` (or add it
+     manually under repo Settings → Secrets and variables → Actions →
+     Secrets — note **Secrets**, not the **Variables** tab used in step 5).
+   - `terraform-aws.yml` passes it to `terraform apply` as
+     `TF_VAR_github_access_token`.
 7. **Provision hosting**: open a PR that touches
    `infrastructure/aws/live/**` and merge it. `terraform-aws.yml` runs and
    applies — this creates the real Amplify app.
@@ -135,6 +136,11 @@ here on.
    -raw site_url`. Merge a PR touching only `infrastructure/aws/**` and
    confirm only `terraform-aws.yml` runs — neither site-deploy workflow
    does.
+
+**Running any of this locally** (not through CI) also needs the token:
+`TF_VAR_github_access_token=<token> terraform apply` (or `-var
+github_access_token=<token>`) — never commit a real value anywhere in this
+repo.
 
 ## Deploying to Azure
 

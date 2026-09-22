@@ -42,4 +42,9 @@ jobs:
       - name: Terraform apply
         # profile="" disables the local-named-profile default (OTS-Prod-Deploy);
         # CI authenticates via the OIDC role assumed above instead.
+        # github_access_token: the Amplify CreateApp API always needs an
+        # explicit GitHub token, even with the Amplify GitHub App already
+        # authorized in the console - see infrastructure/aws/modules/amplify/main.tf.
+        env:
+          TF_VAR_github_access_token: ${{ secrets.AMPLIFY_GITHUB_TOKEN }}
         run: terraform apply -input=false -auto-approve -var profile=""
