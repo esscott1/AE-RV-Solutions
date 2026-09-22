@@ -1,0 +1,40 @@
+name: Deploy site (targets)
+
+on:
+  pull_request:
+    branches: [main]
+    types: [closed]
+    paths:
+      - "site/**"
+
+jobs:
+  read-targets:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.merged == true
+    outputs:
+      aws: ${{ steps.read.outputs.aws }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read deploy targets
+        id: read
+        run: echo "aws=$(yq '.aws' infrastructure/deploy-targets.yml)" >> "$GITHUB_OUTPUT"
+
+  deploy-aws:
+    needs: read-targets
+    runs-on: ubuntu-latest
+    if: needs.read-targets.outputs.aws == 'true'
+    steps:
+      # This is a confirmation step, not the deploy itself. The actual
+      # deploy already happens independently via
+      # .github/workflows/deploy-aws.yml, which fires on the same push to
+      # main and POSTs to an Amplify webhook. It is NOT Amplify's native
+      # GitHub build trigger - that's deliberately disabled in this repo
+      # (enable_auto_build = false, see
+      # infrastructure/aws/modules/amplify/main.tf) because of reliability
+      # problems with Amplify's own path-based build filtering. This job
+      # only confirms AWS is a configured deploy target per
+      # infrastructure/deploy-targets.yml.
+      - name: Confirm AWS deploy target
+        run: echo "AWS is a configured deploy target - the real build/deploy runs via deploy-aws.yml's webhook call."

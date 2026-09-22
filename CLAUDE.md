@@ -76,7 +76,7 @@ There is no test suite or linter configured yet.
 
 ## Deployment (planned)
 
-GitHub repo connected to AWS Amplify Hosting (`us-east-1`). Push to `main`
+GitHub repo connected to AWS Amplify Hosting (`us-west-2`). Push to `main`
 triggers a build; pull requests get preview deployments. Infrastructure is
 planned to live in Terraform under an `infra/` directory, module-per-feature.
 Nothing here is provisioned yet — treat deployment/infra instructions as

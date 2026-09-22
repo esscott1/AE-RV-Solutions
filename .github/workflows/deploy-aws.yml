@@ -1,0 +1,20 @@
+name: Deploy (AWS)
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "infrastructure/**"
+
+jobs:
+  trigger-amplify-build:
+    runs-on: ubuntu-latest
+    env:
+      AMPLIFY_WEBHOOK_URL: ${{ secrets.AMPLIFY_WEBHOOK_URL }}
+    steps:
+      # Only runs if AWS is the active cloud (its webhook secret is set).
+      # `secrets` can't be used directly in an `if:`, so it's copied to an
+      # env var above and checked here instead.
+      - name: Trigger Amplify build
+        if: ${{ env.AMPLIFY_WEBHOOK_URL != '' }}
+        run: curl -sSf -X POST "$AMPLIFY_WEBHOOK_URL"
