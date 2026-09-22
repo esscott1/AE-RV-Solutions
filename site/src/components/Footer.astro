@@ -1,5 +1,17 @@
 <footer class="site-footer">
-  <p>&copy; {new Date().getFullYear()} A&amp;E RV Solutions</p>
+  <div class="site-footer__inner">
+    <p class="site-footer__copy">
+      &copy; {new Date().getFullYear()} A&amp;E RV Solutions
+    </p>
+    <p class="site-footer__credit">
+      Created by <a
+        class="site-footer__link"
+        href="https://otsconsulting.ai"
+        target="_blank"
+        rel="noopener noreferrer"
+      >OTSConsulting.ai</a> &mdash; built with Claude, hosted on AWS.
+    </p>
+  </div>
 </footer>
 
 <style>
@@ -10,8 +22,32 @@
     font-size: 0.9rem;
   }
 
-  .site-footer p {
+  /* The width lives here, on the single wrapper - not on the paragraphs.
+     Nesting both would make each <p> 80% of an already-80% parent and the
+     footer would quietly stop lining up with the hero photo. */
+  .site-footer__inner {
     width: var(--content-width);
     margin-inline: auto;
+  }
+
+  .site-footer__inner p {
+    margin: 0;
+  }
+
+  .site-footer__credit {
+    margin-top: 0.4rem;
+  }
+
+  /* Global `a { color: inherit }` would make this indistinguishable from
+     the surrounding text, so the link states are set explicitly. */
+  .site-footer__link {
+    color: var(--canvas-50);
+    text-decoration: underline;
+    text-underline-offset: 0.15em;
+    transition: color 0.15s ease;
+  }
+
+  .site-footer__link:hover {
+    color: var(--lantern-500);
   }
 </style>

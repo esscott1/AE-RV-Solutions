@@ -7,11 +7,12 @@ Guidance for Claude Code when working in this repository.
 ## Project overview
 Business website for A&E RV Solutions, a company providing RV solar,
 DC-to-AC inversion, and mechanical troubleshooting services.
-Domain: OTSconsulting.info (registered with GoDaddy, DNS pointing to AWS Amplify).
+Domain: aervsolutions.com (registered with GoDaddy, DNS pointing to AWS Amplify).
 
 ## Technical stack
 - Frontend: Astro 5, static output mode (output: 'static' in astro.config.mjs)
-- Styling: Tailwind CSS v4
+- Styling: hand-written CSS with the token system in src/styles/global.css
+  (no CSS framework)
 - Interactive islands: React (contact form, chat widget, PDF library viewer)
 - Components: shadcn/ui where applicable
 - Package manager: npm
@@ -46,7 +47,7 @@ guardrails/safety, agent architecture, system prompts.
 - React islands: PascalCase .jsx files with client: directive at usage site
 - API calls: centralized in src/lib/api.js
 - Environment variables: VITE_ prefix for client-side, no prefix for server-side
-- No inline styles — Tailwind classes only
+- No inline style attributes — use a scoped <style> block in the component
 
 See [README.md](README.md) for additional stack details, directory structure, and dev
 commands.
