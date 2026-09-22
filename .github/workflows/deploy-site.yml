@@ -1,40 +1,79 @@
-name: Deploy site (targets)
+name: Deploy site
 
+# Single entry point for site deploys to every cloud.
+# infrastructure/deploy-targets.yml is authoritative: a cloud deploys only if
+# its flag there is true.
+#
+# Trigger is `push` to main rather than `pull_request: closed` so direct
+# pushes to main deploy too, not just PR merges.
 on:
-  pull_request:
+  push:
     branches: [main]
-    types: [closed]
     paths:
       - "site/**"
 
 jobs:
   read-targets:
     runs-on: ubuntu-latest
-    if: github.event.pull_request.merged == true
     outputs:
       aws: ${{ steps.read.outputs.aws }}
+      azure: ${{ steps.read.outputs.azure }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
 
       - name: Read deploy targets
         id: read
-        run: echo "aws=$(yq '.aws' infrastructure/deploy-targets.yml)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "aws=$(yq '.aws' infrastructure/deploy-targets.yml)" >> "$GITHUB_OUTPUT"
+          echo "azure=$(yq '.azure' infrastructure/deploy-targets.yml)" >> "$GITHUB_OUTPUT"
+
+      - name: Show resolved targets
+        run: cat infrastructure/deploy-targets.yml
 
   deploy-aws:
     needs: read-targets
-    runs-on: ubuntu-latest
     if: needs.read-targets.outputs.aws == 'true'
+    runs-on: ubuntu-latest
+    env:
+      AMPLIFY_WEBHOOK_URL: ${{ secrets.AMPLIFY_WEBHOOK_URL }}
     steps:
-      # This is a confirmation step, not the deploy itself. The actual
-      # deploy already happens independently via
-      # .github/workflows/deploy-aws.yml, which fires on the same push to
-      # main and POSTs to an Amplify webhook. It is NOT Amplify's native
-      # GitHub build trigger - that's deliberately disabled in this repo
+      # Amplify's own GitHub build trigger is deliberately disabled
       # (enable_auto_build = false, see
-      # infrastructure/aws/modules/amplify/main.tf) because of reliability
-      # problems with Amplify's own path-based build filtering. This job
-      # only confirms AWS is a configured deploy target per
-      # infrastructure/deploy-targets.yml.
-      - name: Confirm AWS deploy target
-        run: echo "AWS is a configured deploy target - the real build/deploy runs via deploy-aws.yml's webhook call."
+      # infrastructure/aws/modules/amplify/main.tf) because its monorepo path
+      # filtering has open bug reports of building on every commit regardless
+      # of path. This webhook POST is the real deploy trigger.
+      - name: Trigger Amplify build
+        run: |
+          if [ -z "$AMPLIFY_WEBHOOK_URL" ]; then
+            echo "::error::deploy-targets.yml sets aws: true but the AMPLIFY_WEBHOOK_URL secret is not set."
+            exit 1
+          fi
+          curl -sSf -X POST "$AMPLIFY_WEBHOOK_URL"
+
+  deploy-azure:
+    needs: read-targets
+    if: needs.read-targets.outputs.azure == 'true'
+    runs-on: ubuntu-latest
+    env:
+      AZURE_STATIC_WEB_APPS_API_TOKEN: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+    steps:
+      - name: Check deploy token
+        run: |
+          if [ -z "$AZURE_STATIC_WEB_APPS_API_TOKEN" ]; then
+            echo "::error::deploy-targets.yml sets azure: true but the AZURE_STATIC_WEB_APPS_API_TOKEN secret is not set."
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Deploy to Azure Static Web Apps
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ env.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: upload
+          app_location: site
+          output_location: dist
+          app_build_command: npm run build

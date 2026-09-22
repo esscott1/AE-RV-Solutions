@@ -24,53 +24,56 @@ Each stack has the same shape:
 ## Why deploys go through GitHub Actions instead of a cloud-native push trigger
 
 The site lives in `site/`, and infrastructure changes live in
-`infrastructure/`, in the same repo. Whichever cloud you use, a push to
-`main` that doesn't touch the site must **never** trigger a
-rebuild/redeploy of it. `deploy-aws.yml` is gated with
-`paths: ["site/**"]` — an allow-list, so *only* site content deploys.
-(`deploy-azure.yml` still uses the older `paths-ignore:
-["infrastructure/**"]` deny-list; worth tightening to match whenever the
-Azure path gets picked back up.)
+`infrastructure/`, in the same repo. A push to `main` that doesn't touch
+the site must **never** trigger a rebuild/redeploy of it, so
+`deploy-site.yml` is gated with `paths: ["site/**"]` — an allow-list, so
+*only* site content deploys.
 
-- **AWS**: Amplify's own push trigger (`enable_auto_build`) is disabled
+Neither cloud's native push trigger is used:
+
+- **AWS**: Amplify's own trigger (`enable_auto_build`) is disabled
   entirely — its documented "monorepo app root" build-trigger filtering has
   multiple open bug reports of triggering builds on every commit regardless
-  of path (see `aws/modules/amplify/main.tf`). `deploy-aws.yml` POSTs to an
-  Amplify webhook instead.
+  of path (see `aws/modules/amplify/main.tf`). The `deploy-aws` job POSTs
+  to an Amplify webhook instead.
 - **Azure**: Static Web Apps' Terraform resource doesn't take a GitHub
   connection at all — deployment is *only* ever driven by a CI workflow
-  using a deploy token, so there's no separate native trigger to disable.
-  `deploy-azure.yml` runs the official `Azure/static-web-apps-deploy`
+  using a deploy token, so there's no native trigger to disable. The
+  `deploy-azure` job runs the official `Azure/static-web-apps-deploy`
   action.
-
-Both workflow files always exist; only the one whose secret you've set
-actually deploys (each has a no-op guard step). That's what makes "pick one
-cloud" work without deleting the other's workflow.
 
 ## Where each piece of automation runs
 
-Three separate GitHub Actions workflows exist for AWS, each gated to a
-different set of changed paths so they never fire for the wrong kind of
-change:
+Two GitHub Actions workflows, gated to different paths so neither fires for
+the wrong kind of change:
 
-| Workflow | Triggers on a merged PR touching... | What it does |
+| Workflow | Triggers on a push to `main` touching... | What it does |
 |---|---|---|
-| `terraform-aws.yml` | `infrastructure/aws/live/**`, `infrastructure/aws/modules/**` | Runs `terraform apply` against AWS, authenticated via OIDC (no stored keys) |
-| `deploy-site.yml` | `site/**` | Reads [`deploy-targets.yml`](deploy-targets.yml) and confirms AWS is a configured target (currently a no-op confirmation — see below) |
-| `deploy-aws.yml` | any push to `main` touching `site/**` | POSTs to the Amplify webhook — this is the actual site deploy trigger |
+| `terraform-aws.yml` | `infrastructure/aws/live/**`, `infrastructure/aws/modules/**` (on merged PR) | Runs `terraform apply` against AWS, authenticated via OIDC (no stored keys) |
+| `deploy-site.yml` | `site/**` | Reads [`deploy-targets.yml`](deploy-targets.yml), then deploys to each cloud whose flag is `true` |
 
 `infrastructure/aws/bootstrap/**` deliberately isn't in `terraform-aws.yml`'s
 path filter — `bootstrap` stays a local, one-time step (see below), since
 it creates the very state backend and CI trust role that `terraform-aws.yml`
 depends on.
 
-`deploy-targets.yml` is meant to eventually control which cloud(s) the site
-deploys to, but only its `aws` key is read anywhere today — `azure: false`
-is inert, reserved for when Azure's site-deploy path is built out.
-`deploy-site.yml`'s AWS job is a confirmation step, not a second deploy
-path: the real deploy already happens via `deploy-aws.yml`'s webhook call
-on the same merge (not Amplify's native build trigger, which is disabled —
-see above).
+### `deploy-targets.yml` controls which clouds deploy
+
+```yaml
+aws: true
+azure: false
+```
+
+`deploy-site.yml`'s `read-targets` job reads this file and exposes each flag
+as a job output; `deploy-aws` and `deploy-azure` are each gated on their own
+flag being `"true"`. Flipping a flag is the only thing needed to turn a
+cloud's deploys on or off — no workflow edits.
+
+If a flag is `true` but that cloud's secret (`AMPLIFY_WEBHOOK_URL` /
+`AZURE_STATIC_WEB_APPS_API_TOKEN`) is missing, the job fails loudly with an
+explicit message rather than skipping silently — a `true` flag is a
+statement of intent, so a missing secret is a misconfiguration worth
+surfacing.
 
 ## Deploying to AWS
 
@@ -140,11 +143,10 @@ here on.
    gh secret set AMPLIFY_WEBHOOK_URL --body "<value from above>"
    ```
 9. **Verify**: merge a PR touching `site/` and confirm `deploy-site.yml`
-   (confirmation) and `deploy-aws.yml` (the actual build) both run, and the
-   site goes live at `terraform -chdir=infrastructure/aws/live/prod output
-   -raw site_url`. Merge a PR touching only `infrastructure/aws/**` and
-   confirm only `terraform-aws.yml` runs — neither site-deploy workflow
-   does.
+   runs its `deploy-aws` job, and the site goes live at
+   `terraform -chdir=infrastructure/aws/live/prod output -raw site_url`.
+   Merge a PR touching only `infrastructure/aws/**` and confirm only
+   `terraform-aws.yml` runs — `deploy-site.yml` does not.
 
 **Running any of this locally** (not through CI) also needs the token:
 `TF_VAR_github_access_token=<token> terraform apply` (or `-var
@@ -179,14 +181,23 @@ repo.
    terraform output -raw deployment_token
    gh secret set AZURE_STATIC_WEB_APPS_API_TOKEN --body "<value from above>"
    ```
-6. **Verify**: push a change under `site/` to `main` and confirm the
-   `Deploy (Azure)` workflow runs and the Static Web App builds/deploys.
-   Push a change touching only `infrastructure/**` and confirm the
-   workflow does not run.
+6. **Turn Azure on** in [`deploy-targets.yml`](deploy-targets.yml) by
+   setting `azure: true`. Until that flag flips, `deploy-site.yml` skips
+   its `deploy-azure` job entirely — the secret alone doesn't enable
+   deploys.
+7. **Verify**: push a change under `site/` to `main` and confirm
+   `deploy-site.yml` runs its `deploy-azure` job and the Static Web App
+   builds/deploys. Push a change touching only `infrastructure/**` and
+   confirm the workflow does not run.
 
 ## Switching clouds later
 
-Apply the other stack following its steps above, set its deploy secret,
-and — once you've confirmed it's serving traffic correctly — optionally
-`terraform destroy` the one you're leaving (from its `live/prod` directory)
-and remove its now-unused GitHub secret.
+Apply the other stack following its steps above, set its deploy secret, and
+flip its flag to `true` in [`deploy-targets.yml`](deploy-targets.yml). Both
+clouds can be `true` at once if you want to run them side by side during a
+migration.
+
+Once you've confirmed the new one is serving traffic correctly, set the old
+one's flag back to `false` — that alone stops its deploys, with no workflow
+edits. Then optionally `terraform destroy` the stack you're leaving (from
+its `live/prod` directory) and remove its now-unused GitHub secret.

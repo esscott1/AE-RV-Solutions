@@ -66,5 +66,5 @@ resource "aws_amplify_branch" "this" {
 resource "aws_amplify_webhook" "deploy" {
   app_id      = aws_amplify_app.this.id
   branch_name = aws_amplify_branch.this.branch_name
-  description = "Triggered by .github/workflows/deploy-aws.yml on pushes to ${var.branch_name} that touch site/."
+  description = "Triggered by .github/workflows/deploy-site.yml on pushes to ${var.branch_name} that touch site/."
 }
