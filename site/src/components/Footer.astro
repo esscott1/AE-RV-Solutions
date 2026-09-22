@@ -1,5 +1,20 @@
 <footer class="site-footer">
-  <p>&copy; {new Date().getFullYear()} A&amp;E RV Solutions</p>
+  <div class="site-footer__inner">
+    <!-- Credit first in the DOM because it sits on the left: source order
+         matches reading order, so screen readers and tab order follow what
+         is on screen without needing CSS `order` to lie about it. -->
+    <p class="site-footer__credit">
+      Created by <a
+        class="site-footer__link"
+        href="https://otsconsulting.ai"
+        target="_blank"
+        rel="noopener noreferrer"
+      >OTSConsulting.ai</a> &mdash; built with Claude, hosted on AWS.
+    </p>
+    <p class="site-footer__copy">
+      &copy; {new Date().getFullYear()} A&amp;E RV Solutions
+    </p>
+  </div>
 </footer>
 
 <style>
@@ -10,8 +25,39 @@
     font-size: 0.9rem;
   }
 
-  .site-footer p {
+  /* The width lives here, on the single wrapper - not on the paragraphs.
+     Nesting both would make each <p> 80% of an already-80% parent and the
+     footer would quietly stop lining up with the hero photo. */
+  .site-footer__inner {
     width: var(--content-width);
     margin-inline: auto;
+
+    /* Credit left, copyright hard right, on one line. `flex-wrap` is what
+       makes it adapt: when the two no longer fit, they drop to separate
+       lines - and since each line then holds a single item,
+       space-between leaves both flush left rather than stranding the
+       copyright on the right edge. The row gap only applies once wrapped. */
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.4rem 1.5rem;
+  }
+
+  .site-footer__inner p {
+    margin: 0;
+  }
+
+  /* Global `a { color: inherit }` would make this indistinguishable from
+     the surrounding text, so the link states are set explicitly. */
+  .site-footer__link {
+    color: var(--canvas-50);
+    text-decoration: underline;
+    text-underline-offset: 0.15em;
+    transition: color 0.15s ease;
+  }
+
+  .site-footer__link:hover {
+    color: var(--lantern-500);
   }
 </style>
