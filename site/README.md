@@ -71,7 +71,11 @@ npm install
 npm run dev       # http://localhost:4321
 npm run build     # outputs to dist/
 npm run preview   # serve the production build locally
+npm run check     # astro check (type/diagnostic check)
 ```
+
+Every PR runs `npm run check` and `npm run build` via
+`.github/workflows/site-ci.yml`. A failure blocks the merge into `main`.
 
 ## Deployment
 
