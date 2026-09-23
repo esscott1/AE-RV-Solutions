@@ -85,6 +85,12 @@ data "aws_iam_policy_document" "sfn" {
     resources = [aws_ssm_parameter.enabled.arn]
   }
 
+  statement {
+    sid       = "SearchKnowledgeBase"
+    actions   = ["bedrock:Retrieve"]
+    resources = [aws_bedrockagent_knowledge_base.kb.arn]
+  }
+
   # Step Functions log delivery; AWS only authorizes these on "*".
   statement {
     sid = "LogDelivery"
@@ -120,6 +126,14 @@ locals {
   # chat turns, so a message can't pose as instructions to it.
   transcript = "'<conversation>\\n' & $join($messages.((role = 'user' ? 'Customer: ' : 'Assistant: ') & content), '\\n\\n') & '\\n</conversation>'"
 
+  # The latest customer message plus the one before it, trimmed to
+  # Retrieve's 1,000-character query limit.
+  retrieval_query = "($u := $messages[role = 'user'].content; $n := $count($u); $q := $n > 1 ? $u[$n - 2] & '\\n' & $u[$n - 1] : $u[0]; $substring($q, 0, 1000))"
+
+  # Passage texts scoring at least kb_min_score, separated for readability;
+  # "" when nothing qualifies.
+  retrieved_documents = "($hits := $states.result.RetrievalResults[Score >= ${var.kb_min_score}].Content.Text; $exists($hits) ? $join($hits, '\\n\\n---\\n\\n') : '')"
+
   valid_conversation = join(" and ", [
     "$type($messages) = 'array'",
     "$count($messages) >= 1",
@@ -151,7 +165,7 @@ locals {
         Type      = "Task"
         Resource  = "arn:aws:states:::aws-sdk:ssm:getParameter"
         Arguments = { Name = local.flag_name }
-        Assign    = { messages = "{% $states.input.messages %}" }
+        Assign    = { messages = "{% $states.input.messages %}", documents = "" }
         Output    = { enabled = "{% $states.result.Parameter.Value = 'true' %}" }
         Catch     = [{ ErrorEquals = ["States.ALL"], Next = "Reply_offline" }]
         Next      = "IsEnabled"
@@ -218,9 +232,30 @@ locals {
         Choices = [
           { Condition = "{% $states.input.route = 'emergency' %}", Next = "Reply_emergency" },
           { Condition = "{% $states.input.route = 'decline' %}", Next = "Reply_decline" },
-          { Condition = "{% $states.input.route = 'answer' %}", Next = "Answer" },
+          { Condition = "{% $states.input.route = 'answer' %}", Next = "Retrieve" },
         ]
         Default = "Reply_safety_referral"
+      }
+
+      # Knowledge base lookup, on the answer route only: hazardous,
+      # emergency, and decline questions never reach it. Searches with the
+      # latest customer message plus the one before it (for follow-ups like
+      # "what about a coffee maker?"), and keeps up to kb_num_results passages
+      # scoring at least kb_min_score. If the lookup fails, Answer runs
+      # without documents.
+      Retrieve = {
+        Type     = "Task"
+        Resource = "arn:aws:states:::aws-sdk:bedrockagentruntime:retrieve"
+        Arguments = {
+          KnowledgeBaseId = aws_bedrockagent_knowledge_base.kb.id
+          RetrievalQuery  = { Text = "{% ${local.retrieval_query} %}" }
+          RetrievalConfiguration = {
+            VectorSearchConfiguration = { NumberOfResults = var.kb_num_results }
+          }
+        }
+        Assign = { documents = "{% ${local.retrieved_documents} %}" }
+        Catch  = [{ ErrorEquals = ["States.ALL"], Next = "Answer" }]
+        Next   = "Answer"
       }
 
       Answer = {
@@ -233,8 +268,15 @@ locals {
           Body = {
             anthropic_version = "bedrock-2023-05-31"
             max_tokens        = var.answer_max_tokens
-            system            = file("${path.module}/prompts/assistant.md")
-            messages          = "{% $messages %}"
+            # Three blocks: the fixed rules, the personality, and this
+            # request's documents. The prompt files pass through verbatim; only
+            # the last block is built per request.
+            system = [
+              { type = "text", text = file("${path.module}/prompts/assistant.md") },
+              { type = "text", text = file("${path.module}/prompts/personality.md") },
+              { type = "text", text = "{% '<documents>\\n' & ($documents = '' ? 'No matching documents.' : $documents) & '\\n</documents>' %}" },
+            ]
+            messages = "{% $messages %}"
           }
         }
         # A truncated or empty answer is replaced rather than shown half-done.
