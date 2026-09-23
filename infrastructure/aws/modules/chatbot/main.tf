@@ -19,12 +19,12 @@ locals {
   # Fixed replies. Every route except `answer` returns one of these verbatim:
   # the model never writes a safety, emergency, decline, or offline message.
   replies = {
-    offline         = "Chat is offline right now. Please contact A&E RV Solutions directly."
+    offline         = "Chat is offline right now. Please contact us directly."
     invalid         = "Sorry, I couldn't process that message. Please keep messages short and try again."
-    unavailable     = "Sorry, I can't answer right now. Please try again later or contact A&E RV Solutions directly."
-    safety_referral = "This involves work that can be dangerous: live electrical circuits, batteries, or shore power, generator, or inverter connections. For your safety, please don't attempt it yourself. Contact A&E RV Solutions to have a qualified technician take a look."
-    emergency       = "This could be an emergency. If you smell propane, see smoke or fire, or a CO or propane alarm is sounding: get everyone out of the RV now, don't operate switches or open flames, and call 911 from a safe distance. Once everyone is safe, contact A&E RV Solutions for follow-up service."
-    decline         = "I can only help with questions about A&E RV Solutions and general RV solar, inverter, and troubleshooting topics. I can't share how I'm set up or provide information in bulk."
+    unavailable     = "Sorry, I can't answer right now. Please try again later or contact us directly."
+    safety_referral = "This involves work that can be dangerous: live electrical circuits, batteries, or shore power, generator, or inverter connections. For your safety, please don't attempt it yourself. Contact us and one of our qualified technicians will take a look."
+    emergency       = "This could be an emergency. If you smell propane, see smoke or fire, or a CO or propane alarm is sounding: get everyone out of the RV now, don't operate switches or open flames, and call 911 from a safe distance. Once everyone is safe, contact us for follow-up service."
+    decline         = "I can only help with questions about our services and general RV solar, inverter, and troubleshooting topics. I can't share how I'm set up or provide information in bulk."
   }
 }
 
@@ -277,10 +277,30 @@ locals {
               { type = "text", text = "{% '<documents>\\n' & ($documents = '' ? 'No matching documents.' : $documents) & '\\n</documents>' %}" },
             ]
             messages = "{% $messages %}"
+            # The reply comes back through a forced, schema-strict tool call,
+            # so the answer and its source label arrive as separate fields.
+            tools = [{
+              name        = "respond"
+              description = "Send your reply to the customer, with where its substance came from."
+              strict      = true
+              input_schema = {
+                type                 = "object"
+                additionalProperties = false
+                required             = ["answer", "source"]
+                properties = {
+                  answer = { type = "string", description = "The reply shown to the customer." }
+                  source = { type = "string", enum = ["knowledge_base", "both", "general"] }
+                }
+              }
+            }]
+            tool_choice = { type = "tool", name = "respond" }
           }
         }
         # A truncated or empty answer is replaced rather than shown half-done.
-        Output = "{% ($text := $join($states.result.Body.content[type = 'text'].text, ''); $ok := $states.result.Body.stop_reason = 'end_turn' and $exists($text) and $length($text) > 0; {'route': 'answer', 'reply': $ok ? $text : \"${local.replies.unavailable}\"}) %}"
+        # `source` drives the widget's caption. If no passages were retrieved,
+        # it's "general" whatever the model says: the knowledge base can't be
+        # credited with an answer it never supplied.
+        Output = "{% ($in := ($states.result.Body.content[type = 'tool_use'].input)[0]; $text := $in.answer; $ok := $states.result.Body.stop_reason = 'tool_use' and $type($text) = 'string' and $length($text) > 0; $src := $documents = '' ? 'general' : ($in.source in ['knowledge_base', 'both', 'general'] ? $in.source : 'general'); $ok ? {'route': 'answer', 'reply': $text, 'source': $src} : {'route': 'unavailable', 'reply': \"${local.replies.unavailable}\"}) %}"
         Retry  = local.bedrock_retry
         Catch  = [{ ErrorEquals = ["States.ALL"], Next = "Reply_unavailable" }]
         End    = true

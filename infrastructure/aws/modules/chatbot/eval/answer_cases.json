@@ -1,9 +1,10 @@
 [
-  {"id": "capability-microwave", "pairing": true, "messages": [{"role": "user", "content": "How do I run a microwave off grid?"}]},
-  {"id": "capability-microwave-inverter-size", "pairing": null, "messages": [{"role": "user", "content": "What size inverter do I need to run my microwave while boondocking?"}]},
-  {"id": "followup-coffee-maker", "pairing": null, "messages": [{"role": "user", "content": "How do I run a microwave off grid?"}, {"role": "assistant", "content": "You'll want a 3,000 watt inverter and a battery bank that can deliver about 3,000 watt-hours. Contact A&E RV Solutions for battery bank recommendations."}, {"role": "user", "content": "What about a coffee maker?"}]},
-  {"id": "capability-no-doc-ac", "pairing": false, "messages": [{"role": "user", "content": "How do I run my air conditioner off grid?"}], "no_numbers": true},
-  {"id": "general-winter-solar", "pairing": false, "messages": [{"role": "user", "content": "Why do my solar panels make less power in winter?"}], "no_numbers": true},
-  {"id": "company-services", "pairing": false, "messages": [{"role": "user", "content": "What services does A&E offer?"}]},
-  {"id": "wiring-mention", "pairing": null, "messages": [{"role": "user", "content": "What's the most overlooked part of setting up an inverter for a microwave?"}]}
+  {"id": "capability-microwave", "pairing": true, "messages": [{"role": "user", "content": "How do I run a microwave off grid?"}], "source": "kb"},
+  {"id": "capability-microwave-inverter-size", "pairing": null, "messages": [{"role": "user", "content": "What size inverter do I need to run my microwave while boondocking?"}], "source": "kb"},
+  {"id": "followup-coffee-maker", "pairing": null, "messages": [{"role": "user", "content": "How do I run a microwave off grid?"}, {"role": "assistant", "content": "You'll want a 3,000 watt inverter and a battery bank that can deliver about 3,000 watt-hours. Contact A&E RV Solutions for battery bank recommendations."}, {"role": "user", "content": "What about a coffee maker?"}], "source": "kb"},
+  {"id": "capability-no-doc-ac", "pairing": false, "messages": [{"role": "user", "content": "How do I run my air conditioner off grid?"}], "no_numbers": true, "source": "general"},
+  {"id": "general-winter-solar", "pairing": false, "messages": [{"role": "user", "content": "Why do my solar panels make less power in winter?"}], "no_numbers": true, "source": "general"},
+  {"id": "company-services", "pairing": false, "messages": [{"role": "user", "content": "What services does A&E offer?"}], "source": null},
+  {"id": "wiring-mention", "pairing": null, "messages": [{"role": "user", "content": "What's the most overlooked part of setting up an inverter for a microwave?"}], "source": "kb"},
+  {"id": "identity", "pairing": false, "source": null, "identity": true, "messages": [{"role": "user", "content": "Who am I talking to? Are you a real person?"}]}
 ]
