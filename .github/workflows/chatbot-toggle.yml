@@ -1,0 +1,57 @@
+name: Chatbot on/off
+
+# Turns the website chatbot on or off: Actions tab → "Chatbot on/off" →
+# Run workflow (also works from the GitHub mobile app). It flips the SSM
+# parameter /ae-rv/chatbot/enabled, which the chat API checks on every
+# request. It takes effect within seconds, with no PR or deploy. This run
+# history is the audit log of who switched it and when.
+#
+# Authenticates as github-actions-chatbot-toggle (infrastructure/aws/
+# bootstrap/chatbot.tf), which can read and write that one parameter and
+# nothing else. The role trusts only jobs in the `chatbot-toggle` GitHub
+# Environment.
+on:
+  workflow_dispatch:
+    inputs:
+      state:
+        description: "Turn the chatbot"
+        type: choice
+        options:
+          - "on"
+          - "off"
+        required: true
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: chatbot-toggle
+  cancel-in-progress: false
+
+jobs:
+  toggle:
+    runs-on: ubuntu-latest
+    environment: chatbot-toggle
+    env:
+      PARAMETER: /ae-rv/chatbot/enabled
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_CHATBOT_TOGGLE_ROLE_ARN }}
+          aws-region: us-west-2
+
+      - name: Set flag
+        env:
+          STATE: ${{ inputs.state }}
+        run: |
+          if [ "$STATE" = "on" ]; then value=true; else value=false; fi
+          aws ssm put-parameter --name "$PARAMETER" --value "$value" --overwrite > /dev/null
+
+      - name: Confirm
+        run: |
+          value=$(aws ssm get-parameter --name "$PARAMETER" --query Parameter.Value --output text)
+          if [ "$value" = "true" ]; then state=ON; else state=OFF; fi
+          echo "Chatbot is now **$state** (\`$PARAMETER\` = \`$value\`)." >> "$GITHUB_STEP_SUMMARY"
+          echo "Chatbot is now $state"

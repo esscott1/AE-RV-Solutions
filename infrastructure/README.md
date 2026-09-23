@@ -46,7 +46,7 @@ Neither cloud's native push trigger is used:
 
 Two PR checks gate what can merge. Two deploy workflows then act on what
 merged, each gated to its own paths so neither fires for the wrong kind of
-change:
+change. One manual workflow switches the chatbot on or off:
 
 | Workflow | Triggers on | What it does |
 |---|---|---|
@@ -54,11 +54,30 @@ change:
 | `terraform-aws-plan.yml` | Every PR to `main` (plans only when `infrastructure/aws/**` changed) | `fmt -check`, `validate`, and `terraform plan` for `live/prod` using a read-only role, posted as a PR comment. Required check: a failing plan blocks the merge |
 | `terraform-aws.yml` | `infrastructure/aws/live/**`, `infrastructure/aws/modules/**` (on merged PR) | Runs `terraform apply` against AWS, authenticated via OIDC (no stored keys) |
 | `deploy-site.yml` | `site/**` | Reads [`deploy-targets.yml`](deploy-targets.yml), then deploys to each cloud whose flag is `true` |
+| `chatbot-toggle.yml` | Manual: Actions → "Chatbot on/off" → Run workflow | Sets the chatbot's on/off flag. Takes effect in seconds; no PR or deploy (see [Chatbot](#chatbot)) |
 
 `infrastructure/aws/bootstrap/**` deliberately isn't in `terraform-aws.yml`'s
 path filter — `bootstrap` stays a local, one-time step (see below), since
 it creates the very state backend and CI trust role that `terraform-aws.yml`
 depends on.
+
+### `deploy-targets.yml` controls which clouds deploy
+
+```yaml
+aws: true
+azure: false
+```
+
+`deploy-site.yml`'s `read-targets` job reads this file and exposes each flag
+as a job output; `deploy-aws` and `deploy-azure` are each gated on their own
+flag being `"true"`. Flipping a flag is the only thing needed to turn a
+cloud's deploys on or off — no workflow edits.
+
+If a flag is `true` but that cloud's secret (`AMPLIFY_WEBHOOK_URL` /
+`AZURE_STATIC_WEB_APPS_API_TOKEN`) is missing, the job fails loudly with an
+explicit message rather than skipping silently — a `true` flag is a
+statement of intent, so a missing secret is a misconfiguration worth
+surfacing.
 
 ## Guardrails and safety
 
@@ -191,24 +210,101 @@ HTTPS scanning.
 - Narrowing the **apply** role, which still has `amplify:*` and broad
   Route 53 access on `*`, and adding `default_tags`.
 - Static analysis (tflint/checkov).
+- Per-visitor rate limiting for the chatbot (AWS WAF). See [Chatbot](#chatbot).
 
-### `deploy-targets.yml` controls which clouds deploy
+## Chatbot
 
-```yaml
-aws: true
-azure: false
+A public chat assistant on the site (v1): the on/off flag, a safety gate,
+and Claude Haiku 4.5 on Bedrock. It lives in
+[`aws/modules/chatbot/`](aws/modules/chatbot). Its CI permissions, toggle
+role, owner-alert topic, and monthly budget live in
+[`aws/bootstrap/chatbot.tf`](aws/bootstrap/chatbot.tf).
+
+```
+Widget ─GET /chat/status (no key)─► API Gateway ─► SSM flag ─► {"enabled": true|false}
+Widget ─POST /chat (x-api-key)─► API Gateway REST API
+   │  request schema (≤8 messages, ≤500 chars per customer message) ─► 400, nothing billed
+   │  usage plan: 1 req/s, burst 3, 50 per day ─► 429 "busy"
+   └► Step Functions EXPRESS (synchronous)
+        CheckFlag ─ off/unreadable ─► fixed "offline" reply
+          └► Validate ─► Classify (Haiku 4.5, forced strict tool call)
+               ├ emergency        ─► fixed emergency reply
+               ├ safety_referral  ─► fixed technician referral  ← required safety gate (CLAUDE.md)
+               ├ decline          ─► fixed decline (extraction / bulk / off-topic)
+               ├ answer           ─► Answer (Haiku 4.5 + prompts/assistant.md)
+               └ error / anything else ─► safety_referral (fails closed)
 ```
 
-`deploy-site.yml`'s `read-targets` job reads this file and exposes each flag
-as a job output; `deploy-aws` and `deploy-azure` are each gated on their own
-flag being `"true"`. Flipping a flag is the only thing needed to turn a
-cloud's deploys on or off — no workflow edits.
+**Bedrock access is IAM, not an API key.** The state machine's role has
+`bedrock:InvokeModel` on the `us.` Haiku 4.5 inference profile and the
+foundation model in each region that profile routes to. Usage bills to the
+AWS account. There is no Anthropic account or key. The `x-api-key` the site
+sends is API Gateway's usage-plan key, which is public by design: it only
+applies the throttle and daily quota. The account needed Anthropic's
+one-time model-access use-case form, submitted in the Bedrock console.
 
-If a flag is `true` but that cloud's secret (`AMPLIFY_WEBHOOK_URL` /
-`AZURE_STATIC_WEB_APPS_API_TOKEN`) is missing, the job fails loudly with an
-explicit message rather than skipping silently — a `true` flag is a
-statement of intent, so a missing secret is a misconfiguration worth
-surfacing.
+### Turning it on or off
+
+- **Normally:** the Actions tab → **Chatbot on/off** → Run workflow → `on`
+  or `off`. It works from the GitHub mobile app, and the run history is the
+  audit log.
+- **Fallback:** `aws ssm put-parameter --name /ae-rv/chatbot/enabled --value
+  false --overwrite` (or edit the parameter in the console, under Systems
+  Manager → Parameter Store).
+
+The API enforces the flag on every request, so switching it off also stops
+bots that call the API directly without loading the site. Off costs nothing:
+the state machine stops before any Bedrock call. Terraform creates the flag
+as `false` and ignores its value afterwards, so an apply never undoes a
+toggle.
+
+### Volume and cost controls
+
+| Control | Setting (module variables) |
+|---|---|
+| Daily quota, all visitors combined | `daily_quota` = 50 |
+| Throttle | `throttle_rate_limit` = 1/s, `throttle_burst_limit` = 3 |
+| Conversation caps | `max_messages` = 8, `max_user_message_chars` = 500, `max_assistant_message_chars` = 2500 |
+| Answer length | `answer_max_tokens` = 600 |
+| Usage-spike email | more than `spike_alarm_threshold` = 25 chats in an hour |
+| Monthly budget email (account-wide) | $20, alerts at 50/80/100% (`bootstrap`, `monthly_budget_usd`) |
+
+Pricing (Bedrock, us-west-2, `us.` profile): $1.10 per million input tokens
+and $5.50 per million output tokens. A typical chat costs well under a cent.
+The worst case, with the quota maxed out every day, is roughly $18 a month.
+
+There's **no per-visitor limit** (that would need AWS WAF). One bot can use
+up the day's quota, after which everyone sees "busy" until the next day. The
+spike email tells you; switch the chatbot off if it isn't real traffic.
+Adding WAF (per-IP rate limit, IP reputation, bot challenge) is the upgrade
+path if that happens.
+
+### Anti-distillation, and its limits
+
+- The classifier's `decline` route answers with fixed text when someone asks
+  for the assistant's instructions, bulk dumps or lists, generated Q&A or
+  training data, or tries to change its role.
+- The assistant prompt refuses to reveal its instructions.
+- Short answers and the conversation caps limit what a single session can
+  pull out; the daily quota limits the total.
+- Customer messages reach the classifier as quoted data inside
+  `<conversation>` tags, not as instructions.
+- No conversation is stored, and Step Functions logs errors only, without
+  execution data.
+
+None of this stops a patient, human-paced extractor. It makes bulk
+extraction slow, capped, and noisy. This matters most once v2 adds a
+knowledge base: design it to return short grounded answers, never whole
+documents or raw chunks.
+
+### Changing the prompts or routes
+
+The prompts are versioned files, `prompts/classifier.md` and
+`prompts/assistant.md`, and the fixed replies are `local.replies` in
+`main.tf`. A change shows up in the PR's plan comment as a state-machine
+update. **Before merging any change to routing, rerun the safety eval**
+(hazardous, emergency, extraction, jailbreak, and benign prompts) and confirm
+that no hazardous prompt routes to `answer`.
 
 ## Deploying to AWS
 
@@ -231,9 +327,13 @@ here on.
    once):
    ```
    cd infrastructure/aws/bootstrap
+   cp terraform.tfvars.example terraform.tfvars   # then set alert_email
    terraform init
    terraform apply
    ```
+   `terraform.tfvars` is gitignored: it holds the owner-alert email address,
+   which must never be committed to this public repo.
+
    This creates the S3 state bucket, a DynamoDB table, and two IAM roles
    assumed via OIDC, so no AWS access keys are ever stored as GitHub
    secrets:
@@ -263,11 +363,14 @@ here on.
    policy is scoped to — only a job that declares
    `environment: aws-infra` can assume it. Optionally add a required
    reviewer here for a manual approval gate before `terraform apply` runs.
+   Also create `chatbot-toggle`, which the chatbot toggle role is scoped to
+   the same way.
 5. **Add a repo variable** (Settings → Secrets and variables → Actions →
    Variables) named `AWS_TERRAFORM_ROLE_ARN`, set to the
    `github_actions_role_arn` output from step 2, and one named
    `AWS_TERRAFORM_PLAN_ROLE_ARN`, set to the `github_actions_plan_role_arn`
-   output.
+   output, and one named `AWS_CHATBOT_TOGGLE_ROLE_ARN`, set to the
+   `github_actions_chatbot_toggle_role_arn` output.
 6. **Generate a GitHub token for Amplify** and add it as a repo secret.
    Confirmed by a real `terraform apply` failure (`BadRequestException:
    You should at least provide one valid token`): the Amplify `CreateApp`

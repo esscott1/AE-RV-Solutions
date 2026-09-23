@@ -39,3 +39,26 @@ variable "github_environment" {
   type        = string
   default     = "aws-infra"
 }
+
+variable "chatbot_name_prefix" {
+  description = "Name prefix every chatbot resource uses (state machine, IAM roles, log groups, alarms). The CI roles' chatbot permissions are scoped to it, so it must match modules/chatbot's name_prefix."
+  type        = string
+  default     = "ae-rv-chatbot"
+}
+
+variable "chatbot_toggle_environment" {
+  description = "GitHub Environment whose jobs may assume the chatbot toggle role (used by chatbot-toggle.yml)."
+  type        = string
+  default     = "chatbot-toggle"
+}
+
+variable "alert_email" {
+  description = "Email address for owner alerts (chatbot usage spikes and the monthly budget). No default, and never committed: set it in bootstrap/terraform.tfvars, which is gitignored (see terraform.tfvars.example)."
+  type        = string
+}
+
+variable "monthly_budget_usd" {
+  description = "Account-wide monthly cost budget. Alerts at 50/80/100% of it go to alert_email."
+  type        = number
+  default     = 20
+}

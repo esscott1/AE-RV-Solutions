@@ -22,3 +22,13 @@ output "github_actions_plan_role_arn" {
   description = "Read-only IAM role terraform-aws-plan.yml assumes via OIDC on pull requests. Set as the AWS_TERRAFORM_PLAN_ROLE_ARN repository variable."
   value       = aws_iam_role.github_actions_terraform_plan.arn
 }
+
+output "github_actions_chatbot_toggle_role_arn" {
+  description = "IAM role chatbot-toggle.yml assumes via OIDC to flip the chatbot on or off. Set as the AWS_CHATBOT_TOGGLE_ROLE_ARN repository variable."
+  value       = aws_iam_role.github_actions_chatbot_toggle.arn
+}
+
+output "owner_alerts_topic_name" {
+  description = "SNS topic for owner alerts. modules/chatbot looks it up by this name for its usage-spike alarm."
+  value       = aws_sns_topic.owner_alerts.name
+}
