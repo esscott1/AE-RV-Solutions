@@ -216,8 +216,8 @@ HTTPS scanning.
 
 ## Chatbot
 
-A public chat assistant on the site (v1): the on/off flag, a safety gate,
-and Claude Haiku 4.5 on Bedrock. It lives in
+A public chat assistant on the site: the on/off flag, a safety gate, the
+owner's [knowledge base](#knowledge-base), and Claude Haiku 4.5 on Bedrock. It lives in
 [`aws/modules/chatbot/`](aws/modules/chatbot). Its CI permissions, toggle
 role, owner-alert topic, and monthly budget live in
 [`aws/bootstrap/chatbot.tf`](aws/bootstrap/chatbot.tf).
@@ -233,7 +233,8 @@ Widget ─POST /chat (x-api-key)─► API Gateway REST API
                ├ emergency        ─► fixed emergency reply
                ├ safety_referral  ─► fixed technician referral  ← required safety gate (CLAUDE.md)
                ├ decline          ─► fixed decline (extraction / bulk / off-topic)
-               ├ answer           ─► Answer (Haiku 4.5 + prompts/assistant.md)
+               ├ answer           ─► Retrieve (knowledge base: ≤4 passages, score ≥ 0.4; failure → none)
+               │                      ─► Answer (Haiku 4.5: assistant.md rules + personality.md + <documents>)
                └ error / anything else ─► safety_referral (fails closed)
 ```
 
@@ -301,9 +302,15 @@ documents or raw chunks.
 
 ### Changing the prompts or routes
 
-The prompts are versioned files, `prompts/classifier.md` and
-`prompts/assistant.md`, and the fixed replies are `local.replies` in
-`main.tf`. A change shows up in the PR's plan comment as a state-machine
+The prompts are versioned files in `prompts/`:
+- `classifier.md`: the safety gate's routing.
+- `assistant.md`: the answer rules (safety, anti-extraction, how to use
+  documents, numbers only from documents).
+- `personality.md`: the voice (friendly, direct, RV enthusiasm) and the
+  "one more capability" rule. Tone changes go here, so they never touch
+  the safety text.
+
+The fixed replies are `local.replies` in `main.tf`. A change shows up in the PR's plan comment as a state-machine
 update. **Before merging any change to routing, rerun the safety eval**
 (hazardous, emergency, extraction, jailbreak, and benign prompts) and confirm
 that no hazardous prompt routes to `answer`:
@@ -320,6 +327,22 @@ hazardous or emergency case is routed to `answer`. Test cases live in
 `eval/cases.json`; add one whenever a real conversation is routed wrongly.
 The first run (2026-09-23) scored 32/32 after one expectation correction, with
 0 hazardous prompts routed to `answer`.
+
+**Changes to `assistant.md` or `personality.md`** (or new knowledge that
+changes answers) are reviewed with the answer review, which uses the
+**local** prompt files and the live knowledge base, so it works before
+merging:
+
+```
+AWS_PROFILE=OTS-Prod-Deploy python answers.py
+```
+
+It prints each answer with the passages it used (scores included, for
+tuning `kb_min_score`). It flags broken mechanical rules: the "You could
+also" count, invented numbers where the knowledge base has none, long
+answers, and step-by-step wording. Tone and accuracy are for a person to
+judge. It costs about $0.005 per case. The cases are in
+`eval/answer_cases.json`.
 
 ## Knowledge base
 

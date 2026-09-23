@@ -93,3 +93,15 @@ variable "embedding_dimensions" {
   type        = number
   default     = 1024
 }
+
+variable "kb_num_results" {
+  description = "Most knowledge-base passages retrieved per answer. Kept small: enough context to answer, and too little for anyone to pull the library out in bulk."
+  type        = number
+  default     = 4
+}
+
+variable "kb_min_score" {
+  description = "Minimum relevance score (0-1) for a retrieved passage to reach the model. Filters out weak matches that would pull unrelated content into answers. eval/answers.py prints scores for tuning."
+  type        = number
+  default     = 0.4
+}
