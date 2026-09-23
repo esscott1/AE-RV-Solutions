@@ -22,8 +22,14 @@ Domain: aervsolutions.com (registered with GoDaddy, DNS pointing to AWS Amplify)
 - Contact form: API Gateway → Lambda → SES
 - Schematic library: S3 bucket + CloudFront signed URLs
 - Chat backend: API Gateway (REST) → Step Functions (Express) → Bedrock.
-  v1 (`modules/chatbot/`) has no knowledge base yet; the Bedrock Knowledge
-  Base (S3 Vectors) comes in v2
+  Knowledge base: Bedrock Knowledge Base on S3 Vectors with Titan Text
+  Embeddings V2 (`modules/chatbot/kb.tf`). Terraform owns the containers;
+  the content lives in the top-level `knowledge-base/` folder (the owner
+  chose to keep it in this public repo; it is publicly readable). Merging a
+  change there runs the "Chatbot knowledge base sync" workflow, which
+  mirrors the folder into the private `ae-rv-chatbot-kb-docs-*` bucket
+  (`--delete`) and re-indexes it. Templates live outside that folder
+  (`modules/chatbot/kb-templates/`) so they're never indexed
 - Telegram: Lambda webhook pushes chat notifications to owner's cell
 - Vector store: S3 Vectors (NOT OpenSearch Serverless)
 - Inference model: Claude Haiku 4.5 on Bedrock

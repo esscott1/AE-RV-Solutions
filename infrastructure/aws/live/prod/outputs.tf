@@ -43,3 +43,13 @@ output "chatbot_flag_parameter" {
   description = "SSM parameter holding the chatbot on/off switch."
   value       = module.chatbot.flag_parameter_name
 }
+
+output "kb_docs_bucket" {
+  description = "Upload knowledge base documents here (S3 console), then run the 'Chatbot knowledge base sync' workflow."
+  value       = module.chatbot.kb_docs_bucket
+}
+
+output "knowledge_base_id" {
+  description = "Bedrock knowledge base ID for the chatbot."
+  value       = module.chatbot.knowledge_base_id
+}

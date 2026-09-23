@@ -77,7 +77,8 @@ data "aws_iam_policy_document" "github_actions_terraform_chatbot" {
     resources = [local.chatbot_role_arn]
   }
 
-  # PassRole only to the two services the chatbot's roles are for.
+  # PassRole only to the services the chatbot's roles are for (Bedrock: the
+  # knowledge base's own role, see chatbot_kb.tf).
   statement {
     sid       = "PassChatbotRoles"
     effect    = "Allow"
@@ -87,7 +88,7 @@ data "aws_iam_policy_document" "github_actions_terraform_chatbot" {
     condition {
       test     = "StringEquals"
       variable = "iam:PassedToService"
-      values   = ["states.amazonaws.com", "apigateway.amazonaws.com"]
+      values   = ["states.amazonaws.com", "apigateway.amazonaws.com", "bedrock.amazonaws.com"]
     }
   }
 

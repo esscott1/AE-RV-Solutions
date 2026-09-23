@@ -32,3 +32,8 @@ output "owner_alerts_topic_name" {
   description = "SNS topic for owner alerts. modules/chatbot looks it up by this name for its usage-spike alarm."
   value       = aws_sns_topic.owner_alerts.name
 }
+
+output "github_actions_chatbot_kb_sync_role_arn" {
+  description = "IAM role chatbot-kb-sync.yml assumes via OIDC to re-index the chatbot's knowledge base. Set as the AWS_CHATBOT_KB_SYNC_ROLE_ARN repository variable."
+  value       = aws_iam_role.github_actions_chatbot_kb_sync.arn
+}

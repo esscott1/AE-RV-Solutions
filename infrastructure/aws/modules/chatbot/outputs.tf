@@ -17,3 +17,18 @@ output "state_machine_arn" {
   description = "The chatbot's Step Functions state machine (on/off check, safety gate, answer)."
   value       = aws_sfn_state_machine.flow.arn
 }
+
+output "kb_docs_bucket" {
+  description = "Private S3 bucket for the knowledge base's source documents. Upload here, then run the 'Chatbot knowledge base sync' workflow."
+  value       = aws_s3_bucket.kb_docs.bucket
+}
+
+output "knowledge_base_id" {
+  description = "Bedrock knowledge base ID."
+  value       = aws_bedrockagent_knowledge_base.kb.id
+}
+
+output "kb_data_source_id" {
+  description = "ID of the knowledge base's S3 data source (what a sync re-indexes)."
+  value       = aws_bedrockagent_data_source.kb_docs.data_source_id
+}
