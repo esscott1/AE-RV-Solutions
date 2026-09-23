@@ -10,10 +10,18 @@ const MAX_ASSISTANT_CHARS = 2500;
 const COUNTER_FROM = 400;
 
 const STORAGE_KEY = 'ae-rv-chat';
-const OFFLINE_TEXT = 'Chat is offline right now. Please contact A&E RV Solutions directly.';
+const OFFLINE_TEXT = 'Chat is offline right now. Please contact us directly.';
 const NOTICE_TEXT =
   "AI assistant. For electrical or battery hazards, contact a technician. Please don't share personal information. Automated or bulk access is not permitted.";
 const SAFETY_ROUTES = new Set(['safety_referral', 'emergency']);
+
+// Shown under answers so visitors know where each one came from. Eddie
+// doesn't search the web: "general knowledge" is the AI model's own.
+const SOURCE_CAPTIONS = {
+  knowledge_base: "From A&E's knowledge base",
+  both: "From A&E's knowledge base and general knowledge",
+  general: 'From general knowledge',
+};
 
 // The last messages that fit the API's limits: at most MAX_MESSAGES,
 // starting with a customer message, with long assistant replies cut to
@@ -163,8 +171,8 @@ export default function ChatWidget() {
     setDraft('');
     setSending(true);
 
-    const { route, reply } = await sendChatMessage(requestWindow(next));
-    setMessages([...next, { role: 'assistant', content: reply, route }]);
+    const { route, reply, source } = await sendChatMessage(requestWindow(next));
+    setMessages([...next, { role: 'assistant', content: reply, route, source }]);
     setSending(false);
     // Switched off while the conversation was open.
     if (route === 'offline') setStatus('off');
@@ -247,7 +255,12 @@ export default function ChatWidget() {
                         </p>
                       )}
                       {message.role === 'assistant' ? (
-                        <FormattedReply text={message.content} />
+                        <>
+                          <FormattedReply text={message.content} />
+                          {message.route === 'answer' && SOURCE_CAPTIONS[message.source] && (
+                            <p className="chat-widget__source">{SOURCE_CAPTIONS[message.source]}</p>
+                          )}
+                        </>
                       ) : (
                         <p>{message.content}</p>
                       )}
