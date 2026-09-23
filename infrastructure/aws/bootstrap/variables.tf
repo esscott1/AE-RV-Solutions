@@ -62,3 +62,9 @@ variable "monthly_budget_usd" {
   type        = number
   default     = 20
 }
+
+variable "chatbot_kb_sync_environment" {
+  description = "GitHub Environment whose jobs may assume the knowledge-base sync role (used by chatbot-kb-sync.yml)."
+  type        = string
+  default     = "chatbot-kb-sync"
+}

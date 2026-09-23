@@ -81,3 +81,15 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "embedding_model_id" {
+  description = "Bedrock embedding model for the knowledge base. Changing it means re-embedding everything (recreate the index and re-sync)."
+  type        = string
+  default     = "amazon.titan-embed-text-v2:0"
+}
+
+variable "embedding_dimensions" {
+  description = "Vector size the embedding model produces and the S3 Vectors index stores (Titan Text Embeddings V2: 1024)."
+  type        = number
+  default     = 1024
+}

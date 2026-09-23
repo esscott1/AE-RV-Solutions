@@ -46,7 +46,8 @@ Neither cloud's native push trigger is used:
 
 Two PR checks gate what can merge. Two deploy workflows then act on what
 merged, each gated to its own paths so neither fires for the wrong kind of
-change. One manual workflow switches the chatbot on or off:
+change. A third publishes the chatbot's knowledge base, and one manual
+workflow switches the chatbot on or off:
 
 | Workflow | Triggers on | What it does |
 |---|---|---|
@@ -55,6 +56,7 @@ change. One manual workflow switches the chatbot on or off:
 | `terraform-aws.yml` | `infrastructure/aws/live/**`, `infrastructure/aws/modules/**` (on merged PR) | Runs `terraform apply` against AWS, authenticated via OIDC (no stored keys) |
 | `deploy-site.yml` | `site/**` | Reads [`deploy-targets.yml`](deploy-targets.yml), then deploys to each cloud whose flag is `true` |
 | `chatbot-toggle.yml` | Manual: Actions → "Chatbot on/off" → Run workflow | Sets the chatbot's on/off flag. Takes effect in seconds; no PR or deploy (see [Chatbot](#chatbot)) |
+| `chatbot-kb-sync.yml` | `knowledge-base/**` (on merge to `main`), or manually from Actions → "Chatbot knowledge base sync" | Mirrors `knowledge-base/` into the knowledge base's S3 bucket and re-indexes it; reports indexed and failed counts (see [Knowledge base](#knowledge-base)) |
 
 `infrastructure/aws/bootstrap/**` deliberately isn't in `terraform-aws.yml`'s
 path filter — `bootstrap` stays a local, one-time step (see below), since
@@ -319,6 +321,98 @@ hazardous or emergency case is routed to `answer`. Test cases live in
 The first run (2026-09-23) scored 32/32 after one expectation correction, with
 0 hazardous prompts routed to `answer`.
 
+## Knowledge base
+
+The chatbot's knowledge comes from the owner's own FAQs, notes,
+"capability" pages, and descriptions of diagrams, kept in the top-level
+[`knowledge-base/`](../knowledge-base) folder. Terraform
+([`aws/modules/chatbot/kb.tf`](aws/modules/chatbot/kb.tf)) creates the
+**containers**; **merging a change to that folder publishes it**:
+
+```
+knowledge-base/ ─merge to main─► chatbot-kb-sync.yml
+    │  aws s3 sync --delete (exact mirror)
+    ▼
+S3 bucket ae-rv-chatbot-kb-docs-<account> (private, versioned)
+    │  Bedrock ingestion job
+    ▼
+split into ~300-token passages ─► Titan Text Embeddings V2 ─► S3 Vectors index
+    │
+Chat question ─► Retrieve the most relevant passages ─► the Answer step uses them
+```
+
+**Behavior vs. knowledge:** both are in the repo, reviewed in PRs, and
+published by merging. They differ in what a change needs:
+- **How the bot talks** (personality, safety rules, the "one more
+  capability" rule) lives in `modules/chatbot/prompts/`. It deploys through
+  Terraform, and a change needs the safety eval.
+- **What it knows** lives in `knowledge-base/`. It deploys through the sync
+  workflow in a couple of minutes, with no Terraform involved.
+
+**Public repo:** the owner chose to keep the content here, so it's publicly
+readable on GitHub. The chatbot's anti-distillation controls still limit
+automated use of the chatbot (the quota, the decline route, short answers),
+but they don't make the content secret.
+
+### What to write, and in what format
+
+| Content | Format | Folder in `knowledge-base/` |
+|---|---|---|
+| FAQs | Markdown (`.md`): `## Q: …` then the answer, many per file | `faq/` |
+| "How do I…" capabilities | Markdown, one per file, **including one "Also possible with this setup" pairing** | `capabilities/` |
+| Notes | Markdown with `#`/`##` headings (`.txt`, `.docx`, and `.pdf` also work) | `notes/` |
+| Diagrams | The diagram file **plus a `.md` description beside it, with the same name** | `diagrams/` |
+
+- Templates live in [`aws/modules/chatbot/kb-templates/`](aws/modules/chatbot/kb-templates),
+  outside `knowledge-base/`, so they're never indexed.
+- Markdown is plain text with `#` headings; any editor, even Notepad, works.
+- Diagrams need the description because the knowledge base searches text.
+  It can't interpret a picture.
+- `README.md` files are never uploaded.
+
+### Step by step
+
+1. **Add or edit files** under `knowledge-base/` on a branch, and open a PR.
+   Neither the site build nor the Terraform plan runs for this folder, so
+   the checks finish in seconds.
+2. **Merge** (owner's OK). The **Chatbot knowledge base sync** workflow runs
+   automatically. After a minute or two, its summary shows how many
+   documents were indexed, updated, removed, or failed.
+3. **Check what it finds, without using the chatbot** (AWS console,
+   us-west-2):
+   1. **Bedrock → Knowledge Bases → `ae-rv-chatbot-kb` → Test knowledge
+      base**.
+   2. Turn **off** "Generate responses", so it only retrieves; that's
+      almost free.
+   3. Ask a real customer question. The passages shown are what the chatbot
+      would get.
+4. **Re-sync without a change** (e.g. after a failed run): Actions →
+   **Chatbot knowledge base sync** → Run workflow.
+
+**Don't upload to the S3 bucket by hand.** The sync mirrors `knowledge-base/`
+exactly, so hand-uploaded files are deleted on the next run. The bucket is
+versioned, so anything removed by mistake can still be recovered (**Show
+versions** in the S3 console).
+
+### Costs
+
+- Embedding: Titan V2 costs about $0.02 per million tokens, so syncing a
+  few hundred pages costs pennies.
+- The S3 Vectors storage and queries for a library this size are well under
+  $1 a month.
+
+### Protection
+
+- **The documents bucket:**
+  - private (public access blocked)
+  - encrypted and versioned
+  - `prevent_destroy`, because it holds the owner's own writing
+- **The vector store** is derived data: a sync rebuilds it from the bucket.
+- **The sync role** can only write that one bucket and start and watch
+  ingestion jobs.
+- **The knowledge base's role** can only read the bucket, call Titan, and use
+  its own index.
+
 ## Deploying to AWS
 
 `bootstrap` stays local/manual (run from your machine, once). Everything
@@ -376,14 +470,16 @@ here on.
    policy is scoped to — only a job that declares
    `environment: aws-infra` can assume it. Optionally add a required
    reviewer here for a manual approval gate before `terraform apply` runs.
-   Also create `chatbot-toggle`, which the chatbot toggle role is scoped to
-   the same way.
+   Also create `chatbot-toggle` and `chatbot-kb-sync`, which the chatbot
+   toggle and knowledge-base sync roles are scoped to the same way.
 5. **Add a repo variable** (Settings → Secrets and variables → Actions →
    Variables) named `AWS_TERRAFORM_ROLE_ARN`, set to the
    `github_actions_role_arn` output from step 2, and one named
    `AWS_TERRAFORM_PLAN_ROLE_ARN`, set to the `github_actions_plan_role_arn`
-   output, and one named `AWS_CHATBOT_TOGGLE_ROLE_ARN`, set to the
-   `github_actions_chatbot_toggle_role_arn` output.
+   output, one named `AWS_CHATBOT_TOGGLE_ROLE_ARN`, set to the
+   `github_actions_chatbot_toggle_role_arn` output, and one named
+   `AWS_CHATBOT_KB_SYNC_ROLE_ARN`, set to the
+   `github_actions_chatbot_kb_sync_role_arn` output.
 6. **Generate a GitHub token for Amplify** and add it as a repo secret.
    Confirmed by a real `terraform apply` failure (`BadRequestException:
    You should at least provide one valid token`): the Amplify `CreateApp`

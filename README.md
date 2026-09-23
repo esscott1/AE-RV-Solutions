@@ -10,6 +10,7 @@ troubleshooting), live at [aervsolutions.com](https://aervsolutions.com).
 | [`site/`](site) | The website: Astro (static output), React islands for interactive pieces | [site/README.md](site/README.md) |
 | [`infrastructure/aws/`](infrastructure/aws) | Terraform for AWS: Amplify Hosting, Route 53, CI roles | [infrastructure/README.md](infrastructure/README.md) |
 | `infrastructure/azure/` | Placeholder for future work, not in use | |
+| [`knowledge-base/`](knowledge-base) | What the website chatbot knows (FAQs, capabilities, notes, diagram descriptions). Merging a change here publishes it | [knowledge-base/README.md](knowledge-base/README.md) |
 | [`.github/workflows/`](.github/workflows) | PR checks and deploys | [infrastructure/README.md](infrastructure/README.md#where-each-piece-of-automation-runs) |
 
 ## How changes reach production
