@@ -100,8 +100,11 @@ pull request preview deployments.
 Both workflow triggers are path **allow-lists**, so a change outside those
 paths deploys nothing.
 
-`main` is protected by a repo ruleset: every change goes through a PR (no
-direct pushes, no bypass), and the `changes` and `site-build` jobs from
-`site-ci.yml` must pass before merging. `site-ci.yml` runs on every PR, not
+`main` is protected by a repo ruleset ("main protection"): every change goes
+through a PR (no direct pushes, no force-push), and the `changes` and
+`site-build` jobs from `site-ci.yml` must pass before merging. The repo admin
+role has a PR-only bypass: a red PR can be force-merged (`gh pr merge --admin`
+or the web "bypass rules" checkbox), but direct pushes stay blocked even for
+admins. Never use `--admin` unless the user explicitly asks for an override. `site-ci.yml` runs on every PR, not
 only site PRs, and skips the build when `site/**` is untouched, because a
 path-filtered required check would never start and would block the PR.
