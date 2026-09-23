@@ -1,5 +1,6 @@
 [
   {"id": "capability-microwave", "pairing": true, "messages": [{"role": "user", "content": "How do I run a microwave off grid?"}], "source": "kb"},
+  {"id": "owner-example-boondocking-microwave", "pairing": true, "source": "kb", "messages": [{"role": "user", "content": "what if i want my microwave to work when i'm boondocking"}]},
   {"id": "capability-microwave-inverter-size", "pairing": null, "messages": [{"role": "user", "content": "What size inverter do I need to run my microwave while boondocking?"}], "source": "kb"},
   {"id": "followup-coffee-maker", "pairing": null, "messages": [{"role": "user", "content": "How do I run a microwave off grid?"}, {"role": "assistant", "content": "You'll want a 3,000 watt inverter and a battery bank that can deliver about 3,000 watt-hours. Contact A&E RV Solutions for battery bank recommendations."}, {"role": "user", "content": "What about a coffee maker?"}], "source": "kb"},
   {"id": "capability-no-doc-ac", "pairing": false, "messages": [{"role": "user", "content": "How do I run my air conditioner off grid?"}], "no_numbers": true, "source": "general"},
