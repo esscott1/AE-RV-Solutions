@@ -21,18 +21,46 @@ the site.
 ```
 src/
   layouts/
-    BaseLayout.astro     # <html> shell, meta tags, global stylesheet import
+    BaseLayout.astro     # <html> shell, meta tags, global stylesheet, chat widget
   components/
     Hero.astro           # header/hero: arched company name over campsite photo
     Convenience.astro     # content section: power / connectivity / water-recharge
     Footer.astro
+    ChatWidget.jsx        # React island: the chat assistant (see "Chat widget")
+    ChatWidget.css        # its styles (global, .chat-widget__ prefixed)
+  lib/
+    api.js                # all calls to backend APIs (chat status + chat)
   pages/
     index.astro           # single page for this milestone
   styles/
     global.css             # color tokens, type tokens, base element styles
   assets/
     heroImage.jpg          # hero banner photo — see below
+public/
+  robots.txt               # opts out of AI training crawlers (advisory)
 ```
+
+## Chat widget
+
+`ChatWidget.jsx` is the site's first React island. `BaseLayout.astro` renders
+it on every page with `client:idle`, so React loads only after the page is
+idle (about 70 KB gzipped, almost all React itself).
+
+- It talks to the chatbot API (`infrastructure/aws/modules/chatbot`) through
+  `src/lib/api.js`, using two build-time variables: `PUBLIC_CHAT_API_URL`
+  and `PUBLIC_CHAT_API_KEY`. Production gets them from the Amplify app
+  (Terraform). **Locally, copy `.env.example` to `.env`** and fill it in.
+  Without them the widget isn't rendered at all, which is also what CI
+  builds do.
+- It asks `GET /chat/status` whether chat is switched on **when the panel is
+  opened**, never on page load. When the chatbot is off (Actions →
+  "Chatbot on/off"), the panel shows an offline note instead of the chat.
+- Conversations live in `sessionStorage` for the tab only. Nothing is stored
+  on the server. The widget sends at most the last 8 messages, within the
+  API's limits.
+- Replies are rendered from a small markdown subset (bold, lists, line
+  breaks) as React elements, never as HTML. Technician-referral and
+  emergency replies get a "Safety notice" style.
 
 ## Replacing the hero photo
 

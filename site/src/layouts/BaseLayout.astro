@@ -1,5 +1,6 @@
 ---
 import '../styles/global.css';
+import ChatWidget from '../components/ChatWidget.jsx';
 
 interface Props {
   title: string;
@@ -23,5 +24,9 @@ const {
   </head>
   <body>
     <slot />
+    <!-- Loads React only once the browser is idle, so it never delays first
+         paint. The widget checks whether chat is switched on when it's
+         opened, not on page load. -->
+    <ChatWidget client:idle />
   </body>
 </html>

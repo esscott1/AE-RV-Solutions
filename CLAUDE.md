@@ -56,7 +56,11 @@ guardrails/safety, agent architecture, system prompts.
 
 ## Code conventions
 - Astro components: PascalCase .astro files
-- React islands: PascalCase .jsx files with client: directive at usage site
+- React islands: PascalCase .jsx files with client: directive at usage site.
+  The first is `ChatWidget.jsx` (in `BaseLayout.astro`, `client:idle`). An
+  island's styles go in a sibling `.css` file it imports, with every class
+  prefixed by the component name (e.g. `.chat-widget__`), because that CSS is
+  global, not scoped
 - API calls: centralized in src/lib/api.js
 - Environment variables: `PUBLIC_` prefix for values browser code reads
   (Astro's default; it doesn't expose `VITE_`), no prefix for server-side.
