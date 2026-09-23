@@ -21,7 +21,9 @@ Domain: aervsolutions.com (registered with GoDaddy, DNS pointing to AWS Amplify)
 - Hosting: AWS Amplify Hosting via GitHub → main branch
 - Contact form: API Gateway → Lambda → SES
 - Schematic library: S3 bucket + CloudFront signed URLs
-- Chat backend: API Gateway → Step Functions → Bedrock Knowledge Base (S3 Vectors)
+- Chat backend: API Gateway (REST) → Step Functions (Express) → Bedrock.
+  v1 (`modules/chatbot/`) has no knowledge base yet; the Bedrock Knowledge
+  Base (S3 Vectors) comes in v2
 - Telegram: Lambda webhook pushes chat notifications to owner's cell
 - Vector store: S3 Vectors (NOT OpenSearch Serverless)
 - Inference model: Claude Haiku 4.5 on Bedrock
@@ -29,8 +31,8 @@ Domain: aervsolutions.com (registered with GoDaddy, DNS pointing to AWS Amplify)
 ## Infrastructure as code
 - Tool: Terraform
 - Location: `infrastructure/aws/` (bootstrap/, modules/, live/prod/)
-- Module structure: amplify/ today; contact/, library/, chatbot/, telegram/
-  as those features get built
+- Module structure: amplify/ and chatbot/ today; contact/, library/,
+  telegram/ as those features get built
 - State backend: S3 with native lockfile (`use_lockfile = true`, Terraform
   >= 1.10). The DynamoDB lock table still exists from bootstrap but is no
   longer used.
@@ -41,6 +43,12 @@ Any chat response touching live electrical, battery gas/swelling, or
 combined shore/generator/inverter scenarios must route to the safety
 gate state in Step Functions and return a technician referral.
 
+Implemented in `infrastructure/aws/modules/chatbot/`: the `Classify` state
+(the prompt is in `prompts/classifier.md`) routes to the `Reply_safety_referral`
+Pass state, which returns fixed text the model never writes. Any classifier
+error or unexpected route also fails closed to it. Changes to the prompts or
+routes need the safety eval rerun (see infrastructure/README.md → Chatbot).
+
 ## CCA-F learning
 Flag when a task maps to a CCA-F exam domain:
 prompt engineering, Claude API, RAG architecture,
@@ -50,7 +58,10 @@ guardrails/safety, agent architecture, system prompts.
 - Astro components: PascalCase .astro files
 - React islands: PascalCase .jsx files with client: directive at usage site
 - API calls: centralized in src/lib/api.js
-- Environment variables: VITE_ prefix for client-side, no prefix for server-side
+- Environment variables: `PUBLIC_` prefix for values browser code reads
+  (Astro's default; it doesn't expose `VITE_`), no prefix for server-side.
+  The site's build-time values are set on the Amplify app from Terraform
+  (`live/prod/main.tf`)
 - No inline style attributes — use a scoped <style> block in the component
 
 See [README.md](README.md) for additional stack details, directory structure, and dev
@@ -98,6 +109,12 @@ deploy through GitHub Actions, never through a cloud-native push trigger:
   bucket have `prevent_destroy`, so any change that would destroy or replace
   them fails at plan time on the PR. To tear one down on purpose, remove its
   `prevent_destroy` in its own PR first.
+- **Chatbot on/off:** the Actions tab → "Chatbot on/off" workflow
+  (`chatbot-toggle.yml`). It flips the SSM parameter `/ae-rv/chatbot/enabled`,
+  which the chat API checks on every request, and takes effect in seconds
+  with no deploy. Fallback: `aws ssm put-parameter --name
+  /ae-rv/chatbot/enabled --value true|false --overwrite`. Terraform ignores
+  the parameter's value, so applies never undo a toggle.
 - The repo is public, so CI logs are world-readable. Both Terraform
   workflows mask the Amplify webhook URL (its token can start builds, and
   the provider doesn't mark it sensitive).

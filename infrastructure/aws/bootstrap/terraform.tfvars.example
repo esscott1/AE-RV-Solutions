@@ -1,0 +1,3 @@
+# Copy to terraform.tfvars (gitignored) and fill in. Never commit the real
+# file: this repo is public.
+alert_email = "you@example.com"

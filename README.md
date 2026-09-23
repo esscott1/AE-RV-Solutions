@@ -35,6 +35,11 @@ Production is protected before the merge, not after:
 - **`prevent_destroy`** on the DNS zone, Amplify app and branch, custom
   domain, and state bucket. Any change that would destroy or replace them
   fails at plan time.
+- **Chatbot safety gate and kill switch.** Questions about live electrical
+  work, batteries, or shore/generator/inverter setups get a fixed technician
+  referral, never a model-written procedure. An on/off switch (Actions →
+  "Chatbot on/off") stops the chatbot in seconds, and a daily quota caps
+  its volume and cost.
 - **Least-privilege CI.** No stored AWS keys (GitHub OIDC). PR plans run
   under a read-only role scoped to this site's resources, and secrets are
   kept out of the public CI logs.

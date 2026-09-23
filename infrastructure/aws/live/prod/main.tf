@@ -32,9 +32,30 @@ module "amplify" {
   github_access_token = var.github_access_token
   domain_name         = var.domain_name
 
+  # Build-time settings for the site's chat widget. Astro only exposes
+  # PUBLIC_-prefixed variables to browser code. Both values are public by
+  # design (the key only applies the usage plan), so they appear in plan
+  # output. Changing them doesn't trigger a build (auto-build is off); the
+  # next site deploy picks them up.
+  environment_variables = {
+    PUBLIC_CHAT_API_URL = module.chatbot.chat_api_url
+    PUBLIC_CHAT_API_KEY = module.chatbot.chat_api_key
+  }
+
   # Amplify writes the validation and routing records into the zone, so the
   # zone must exist first. Nothing in the association references the zone,
   # so without this the ordering is invisible to Terraform and a
   # from-scratch apply could race.
   depends_on = [aws_route53_zone.primary]
+}
+
+# Public website chatbot: on/off flag, safety gate, Bedrock (Claude Haiku
+# 4.5), and volume limits. Its CI permissions, toggle role, and owner-alert
+# topic live in bootstrap/chatbot.tf.
+module "chatbot" {
+  source = "../../modules/chatbot"
+
+  tags = {
+    Customer = "AERVSolutions"
+  }
 }
