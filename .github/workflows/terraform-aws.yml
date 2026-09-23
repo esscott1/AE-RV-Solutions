@@ -39,6 +39,14 @@ jobs:
       - name: Terraform init
         run: terraform init -input=false -backend-config=backend.hcl
 
+      - name: Mask webhook URL
+        # The repo is public, so apply logs are world-readable. The provider
+        # doesn't mark aws_amplify_webhook.url sensitive, so an apply touching
+        # the webhook could print it. See terraform-aws-plan.yml.
+        run: |
+          url=$(terraform output -raw webhook_url 2>/dev/null || true)
+          if [ -n "$url" ]; then echo "::add-mask::$url"; fi
+
       - name: Terraform apply
         # profile="" disables the local-named-profile default (OTS-Prod-Deploy);
         # CI authenticates via the OIDC role assumed above instead.

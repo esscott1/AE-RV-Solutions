@@ -13,6 +13,13 @@ resource "aws_route53_zone" "primary" {
   tags = {
     Customer = "AERVSolutions"
   }
+
+  # A recreated zone gets new nameservers, and the domain stops resolving
+  # until they're changed at GoDaddy. To delete it deliberately, remove this
+  # in its own PR first.
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 module "amplify" {

@@ -49,6 +49,7 @@ the wrong kind of change:
 
 | Workflow | Triggers on a push to `main` touching... | What it does |
 |---|---|---|
+| `terraform-aws-plan.yml` | Every PR to `main` (plans only when `infrastructure/aws/**` changed) | `fmt -check`, `validate`, and `terraform plan` for `live/prod` using a read-only role, posted as a PR comment. Required check: a failing plan blocks the merge |
 | `terraform-aws.yml` | `infrastructure/aws/live/**`, `infrastructure/aws/modules/**` (on merged PR) | Runs `terraform apply` against AWS, authenticated via OIDC (no stored keys) |
 | `deploy-site.yml` | `site/**` | Reads [`deploy-targets.yml`](deploy-targets.yml), then deploys to each cloud whose flag is `true` |
 
@@ -99,9 +100,21 @@ here on.
    terraform init
    terraform apply
    ```
-   This creates the S3 state bucket, a DynamoDB table, and an IAM role
-   (`github-actions-terraform`) that `terraform-aws.yml` assumes via
-   OIDC — no AWS access keys are ever stored as GitHub secrets.
+   This creates the S3 state bucket, a DynamoDB table, and two IAM roles
+   assumed via OIDC, so no AWS access keys are ever stored as GitHub
+   secrets:
+   - `github-actions-terraform`: used by `terraform-aws.yml` to apply.
+     Scoped to the `aws-infra` Environment.
+   - `github-actions-terraform-plan`: used by `terraform-aws-plan.yml`.
+     Read-only: it can read the prod state and write only its lock object,
+     and it can read only the one Amplify app and hosted zone (the
+     `amplify_app_id` / `hosted_zone_id` variables). Trusted for this repo's
+     `pull_request` subject. Fork PRs never receive an OIDC token.
+
+   If a CI plan fails with `AccessDenied` after a new resource type is
+   added to `live/prod`, add the exact read action it names to the plan
+   role's policy and re-apply `bootstrap` locally. Don't widen it to a
+   wildcard.
 
    Note: the DynamoDB table is **no longer used**. `live/prod`'s backend
    now uses S3's native locking (`use_lockfile = true`, Terraform ≥ 1.10),
@@ -118,7 +131,9 @@ here on.
    reviewer here for a manual approval gate before `terraform apply` runs.
 5. **Add a repo variable** (Settings → Secrets and variables → Actions →
    Variables) named `AWS_TERRAFORM_ROLE_ARN`, set to the
-   `github_actions_role_arn` output from step 2.
+   `github_actions_role_arn` output from step 2, and one named
+   `AWS_TERRAFORM_PLAN_ROLE_ARN`, set to the `github_actions_plan_role_arn`
+   output.
 6. **Generate a GitHub token for Amplify** and add it as a repo secret.
    Confirmed by a real `terraform apply` failure (`BadRequestException:
    You should at least provide one valid token`): the Amplify `CreateApp`

@@ -86,9 +86,21 @@ successful build is the only automated gate.
 Provisioned and live in `us-west-2`. Both the infrastructure and the site
 deploy through GitHub Actions, never through a cloud-native push trigger:
 
+- `terraform-aws-plan.yml` runs `fmt -check`, `validate` and `plan` for
+  `live/prod` on every PR that touches `infrastructure/aws/**`, and posts the
+  plan as a single PR comment that's updated on each push. It uses the
+  read-only `github-actions-terraform-plan` role and a placeholder
+  `github_access_token` (never the real PAT).
 - `terraform-aws.yml` runs `terraform apply`, gated to merged PRs touching
   `infrastructure/aws/live/**` or `infrastructure/aws/modules/**`, and
   authenticates via OIDC (no stored AWS keys).
+- The Route 53 zone, Amplify app, branch, domain association and state
+  bucket have `prevent_destroy`, so any change that would destroy or replace
+  them fails at plan time on the PR. To tear one down on purpose, remove its
+  `prevent_destroy` in its own PR first.
+- The repo is public, so CI logs are world-readable. Both Terraform
+  workflows mask the Amplify webhook URL (its token can start builds, and
+  the provider doesn't mark it sensitive).
 - `deploy-site.yml` is gated to pushes touching `site/**`. It reads
   `infrastructure/deploy-targets.yml` and POSTs an Amplify webhook.
 
@@ -102,9 +114,11 @@ paths deploys nothing.
 
 `main` is protected by a repo ruleset ("main protection"): every change goes
 through a PR (no direct pushes, no force-push), and the `changes` and
-`site-build` jobs from `site-ci.yml` must pass before merging. The repo admin
+`site-build` jobs from `site-ci.yml` plus the `tf-changes` and
+`terraform-plan` jobs from `terraform-aws-plan.yml` must pass before merging. The repo admin
 role has a PR-only bypass: a red PR can be force-merged (`gh pr merge --admin`
 or the web "bypass rules" checkbox), but direct pushes stay blocked even for
-admins. Never use `--admin` unless the user explicitly asks for an override. `site-ci.yml` runs on every PR, not
-only site PRs, and skips the build when `site/**` is untouched, because a
-path-filtered required check would never start and would block the PR.
+admins. Never use `--admin` unless the user explicitly asks for an override.
+Both PR workflows run on every PR and skip their real work when their paths
+are untouched, because a path-filtered required check would never start and
+would block the PR.

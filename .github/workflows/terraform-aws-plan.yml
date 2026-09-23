@@ -1,0 +1,169 @@
+name: Terraform plan (AWS)
+
+# PR gate for infrastructure/aws: fmt, validate and a real `terraform plan`
+# against live/prod, posted as a single PR comment that is updated on each
+# push. A failing plan fails the job, and `tf-changes` + `terraform-plan` are
+# required checks in the repo's ruleset on main. That includes a plan that
+# would destroy or replace anything marked prevent_destroy. terraform-aws.yml
+# still does the apply, on merge.
+#
+# Same always-run pattern as site-ci.yml: no `paths:` filter, because a
+# path-filtered required check never starts and blocks the PR. `tf-changes`
+# decides whether a plan is needed, and a job skipped by its `if:` reports
+# success.
+#
+# Authenticates as github-actions-terraform-plan (infrastructure/aws/
+# bootstrap), a read-only role trusted for this repo's pull_request subject.
+# The repo is public, so this job's log and the PR comment are world-readable:
+# the Amplify webhook URL (whose token can start builds) is masked in the log
+# and redacted from the comment.
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  id-token: write
+  pull-requests: write
+
+concurrency:
+  group: terraform-aws-plan-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  tf-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      tf: ${{ steps.diff.outputs.tf }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          # The test merge commit plus its first parent (the base branch tip).
+          fetch-depth: 2
+
+      - name: Detect infrastructure changes
+        id: diff
+        # HEAD is GitHub's test merge commit and HEAD^1 is main, so this diff
+        # is exactly what the PR changes. bootstrap/ is included: it isn't
+        # planned here (it's applied locally), but fmt and validate cover it.
+        run: |
+          if git diff --name-only HEAD^1 HEAD | grep -qE '^(infrastructure/aws/|\.github/workflows/terraform-aws(-plan)?\.yml$)'; then
+            echo "tf=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "tf=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  terraform-plan:
+    needs: tf-changes
+    if: needs.tf-changes.outputs.tf == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infrastructure/aws/live/prod
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_TERRAFORM_PLAN_ROLE_ARN }}
+          aws-region: us-west-2
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          # Raw terraform output, so plan.log below is plain text.
+          terraform_wrapper: false
+
+      - name: Terraform fmt
+        working-directory: infrastructure/aws
+        run: terraform fmt -check -recursive
+
+      - name: Terraform init
+        run: terraform init -input=false -backend-config=backend.hcl
+
+      - name: Terraform validate
+        run: terraform validate -no-color
+
+      - name: Mask webhook URL
+        # The provider doesn't mark aws_amplify_webhook.url sensitive, so a
+        # plan touching the webhook could print it. Masking it here redacts it
+        # from every later log line. It does not affect the PR comment, which
+        # is redacted separately below.
+        run: |
+          url=$(terraform output -raw webhook_url 2>/dev/null || true)
+          if [ -n "$url" ]; then echo "::add-mask::$url"; fi
+
+      - name: Terraform plan
+        id: plan
+        # A placeholder, never the real PAT: access_token has
+        # ignore_changes, so its value can't produce a diff, and the real
+        # token stays out of PR-triggered jobs.
+        env:
+          TF_VAR_github_access_token: placeholder-unused-by-plan
+        # Captures the exit code instead of failing here, so the comment is
+        # posted even for a failed plan. The final step fails the job.
+        run: |
+          set +e
+          terraform plan -input=false -no-color -lock-timeout=2m -out=tfplan -var profile="" > plan.log 2>&1
+          code=$?
+          cat plan.log
+          echo "exitcode=$code" >> "$GITHUB_OUTPUT"
+
+      - name: Post plan to PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXIT_CODE: ${{ steps.plan.outputs.exitcode }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          MARKER: "<!-- terraform-plan-aws -->"
+        run: |
+          if [ "$EXIT_CODE" = "0" ]; then
+            terraform show -no-color tfplan > body.txt
+            summary="✅ $(grep -m1 -E '^(Plan:|No changes)' body.txt || echo 'Plan succeeded')"
+          else
+            cp plan.log body.txt
+            summary="❌ Plan failed ($(grep -m1 '^Error:' plan.log || echo "exit code $EXIT_CODE"))"
+          fi
+
+          # Masking only covers logs, so redact the webhook token from the
+          # comment explicitly, and keep it under GitHub's 65,536-char limit.
+          sed -E -i 's/(token=)[^&[:space:]"]+/\1[REDACTED]/g' body.txt
+          if [ "$(wc -c < body.txt)" -gt 60000 ]; then
+            head -c 60000 body.txt > body.trunc && mv body.trunc body.txt
+            printf '\n\n... truncated, see the run log for the full output.\n' >> body.txt
+          fi
+
+          {
+            echo "$MARKER"
+            echo "### Terraform plan: \`live/prod\`"
+            echo
+            echo "**$summary**"
+            echo
+            echo "<details><summary>Show output</summary>"
+            echo
+            echo '```'
+            cat body.txt
+            echo '```'
+            echo
+            echo "</details>"
+            echo
+            echo "[Run log]($RUN_URL) · commit ${GITHUB_SHA::7}"
+          } > comment.md
+
+          # One comment per PR, updated in place on every push.
+          comment_id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" --paginate \
+            --jq ".[] | select(.body | startswith(\"$MARKER\")) | .id" | tail -1)
+          if [ -n "$comment_id" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$comment_id" -F body=@comment.md > /dev/null
+          else
+            gh pr comment "$PR_NUMBER" --body-file comment.md
+          fi
+
+      - name: Fail on plan error
+        if: steps.plan.outputs.exitcode != '0'
+        run: |
+          echo "::error::terraform plan failed - see the PR comment or the plan step's log."
+          exit 1
