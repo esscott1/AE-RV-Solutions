@@ -48,7 +48,7 @@ INFERENCE_PROFILE = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 NUM_RESULTS = 4      # variables.tf kb_num_results
 MIN_SCORE = 0.4      # variables.tf kb_min_score
 MAX_TOKENS = 600     # variables.tf answer_max_tokens
-LONG_ANSWER_CHARS = 1200
+LONG_ANSWER_CHARS = 450   # about 2-3 short sentences plus the "You could also" line
 # A quantity with a unit: "1,500 W", "30%", "13,000+ watts", "200 Ah".
 QUANTITY = re.compile(
     r"\d[\d,.]*\+?\s*(%|percent\b|w\b|watts?\b|wh\b|watt-hours?\b|kwh\b|ah\b|amp-?hours?\b|amps?\b|volts?\b|v\b|btu\b|hours?\b)",
