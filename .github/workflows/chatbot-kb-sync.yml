@@ -9,8 +9,14 @@ name: Chatbot knowledge base sync
 # 2. Re-indexes the knowledge base (a Bedrock ingestion job) and reports how
 #    many documents were indexed, updated, removed, or failed.
 #
-# Runs automatically when a merge to main touches knowledge-base/, and
+# Runs automatically when a merge to main touches knowledge-base/ (README
+# files excepted: they're never uploaded, so they don't need a sync), and
 # manually from Actions → "Chatbot knowledge base sync" → Run workflow.
+#
+# Keep knowledge-base/ changes out of PRs that also change the chatbot's
+# Terraform: both workflows start on the same merge, and a sync that runs
+# before the apply finishes can fail (e.g. NoSuchBucket on the very first
+# apply). Re-running it manually afterwards fixes that.
 #
 # Authenticates as github-actions-chatbot-kb-sync (infrastructure/aws/
 # bootstrap/chatbot_kb.tf): it can write only that bucket and only start and
@@ -21,6 +27,8 @@ on:
     branches: [main]
     paths:
       - "knowledge-base/**"
+      - "!knowledge-base/README.md"
+      - "!knowledge-base/**/README.md"
   workflow_dispatch:
 
 permissions:

@@ -30,6 +30,11 @@ Writing tips are in the [templates README](../infrastructure/aws/modules/chatbot
 3. The sync workflow runs automatically. Its summary shows how many
    documents were indexed, updated, removed, or failed.
 
+Keep changes to this folder in their own PRs, separate from Terraform
+changes. Both deploy on merge, and a sync that races an unfinished apply
+can fail. If a sync ever fails that way, run it again from Actions →
+"Chatbot knowledge base sync" → Run workflow.
+
 The repo is the **single source of truth**. The sync mirrors this folder
 exactly, deletions included, so files uploaded straight to the S3 bucket
 are removed on the next sync.
