@@ -44,11 +44,13 @@ Neither cloud's native push trigger is used:
 
 ## Where each piece of automation runs
 
-Two GitHub Actions workflows, gated to different paths so neither fires for
-the wrong kind of change:
+Two PR checks gate what can merge. Two deploy workflows then act on what
+merged, each gated to its own paths so neither fires for the wrong kind of
+change:
 
-| Workflow | Triggers on a push to `main` touching... | What it does |
+| Workflow | Triggers on | What it does |
 |---|---|---|
+| `site-ci.yml` | Every PR to `main` (builds only when `site/**` changed) | `astro check` + `astro build`. Required check |
 | `terraform-aws-plan.yml` | Every PR to `main` (plans only when `infrastructure/aws/**` changed) | `fmt -check`, `validate`, and `terraform plan` for `live/prod` using a read-only role, posted as a PR comment. Required check: a failing plan blocks the merge |
 | `terraform-aws.yml` | `infrastructure/aws/live/**`, `infrastructure/aws/modules/**` (on merged PR) | Runs `terraform apply` against AWS, authenticated via OIDC (no stored keys) |
 | `deploy-site.yml` | `site/**` | Reads [`deploy-targets.yml`](deploy-targets.yml), then deploys to each cloud whose flag is `true` |
@@ -57,6 +59,138 @@ the wrong kind of change:
 path filter — `bootstrap` stays a local, one-time step (see below), since
 it creates the very state backend and CI trust role that `terraform-aws.yml`
 depends on.
+
+## Guardrails and safety
+
+`terraform-aws.yml` applies with `-auto-approve` as soon as a PR merges, so
+every safeguard has to act **before** the merge. Four layers do that:
+
+```
+PR opened ─► required checks (plan gate) ─► ruleset allows merge ─► apply on merge
+                  │                                                     │
+                  └── prevent_destroy fails the plan ◄──────────────────┘ (and the apply, as a backstop)
+```
+
+### 1. Branch ruleset on `main`
+
+A repo ruleset named **main protection** (Settings → Rules → Rulesets):
+
+- **Every change goes through a PR.** Direct pushes, force-pushes, and
+  deleting `main` are all rejected.
+- **Four required checks:** `changes` + `site-build` (`site-ci.yml`) and
+  `tf-changes` + `terraform-plan` (`terraform-aws-plan.yml`). They must come
+  from the GitHub Actions app, so nothing else can report them green.
+- **No review approvals are required.** This is a solo repo, and GitHub
+  doesn't let you approve your own PR.
+- **Override:** the repo admin role has a **PR-only bypass**. A PR with red
+  checks can be force-merged with `gh pr merge <n> --admin` or the web
+  "bypass rules" checkbox, but direct pushes stay blocked even for admins.
+  Every override therefore still leaves a PR on record.
+
+Both PR workflows run on **every** PR and skip their real work when their
+paths are untouched. A path-filtered required check never starts, so it
+would leave unrelated PRs stuck on "Expected — waiting". A job skipped by its
+`if:` reports success. The `changes`/`tf-changes` detector jobs are
+required too: if one errors, its skipped build or plan job can't count as a
+pass.
+
+### 2. Plan on every infrastructure PR
+
+`terraform-aws-plan.yml` runs `terraform fmt -check -recursive` (all of
+`infrastructure/aws`, including `bootstrap/`), `validate`, and a real `plan`
+of `live/prod`. It posts the plan as **one PR comment, updated in place on
+every push**: ✅ with the plan summary, or ❌ with the error. Any failure
+fails the `terraform-plan` check, which blocks the merge.
+
+`bootstrap/` is formatted and validated but never planned or applied in CI.
+It's a local, manual step (see "Deploying to AWS").
+
+### 3. `prevent_destroy` on resources whose loss takes the site down
+
+| Resource | Why it's protected |
+|---|---|
+| `aws_route53_zone.primary` | A recreated zone gets **new nameservers**, and the domain stops resolving until they're changed at GoDaddy |
+| `aws_amplify_app.this` | Hosts the site. Recreating it drops the app, its branch, and the domain |
+| `aws_amplify_branch.this` | The production branch the domain points at |
+| `aws_amplify_domain_association.this` | The live domain and its certificate. Also catches `count` dropping to 0 |
+| `aws_s3_bucket.tfstate` (bootstrap) | Holds every stack's state |
+
+Any plan that would destroy **or replace** one of these fails with
+`Error: Instance cannot be destroyed`. That fails the PR check, and it would
+also fail the apply, as a second line of defense. The Amplify webhook is
+deliberately *not* protected: recreating it only rotates its URL, and
+`deploy-site.yml` fails loudly on the stale secret.
+
+**Tearing one down on purpose:** remove its `prevent_destroy` in its own
+PR, merge that, and then make the destructive change in a second PR.
+
+**Known limitation:** deleting a resource block deletes its
+`prevent_destroy` along with it. For that case, the posted plan is the
+safeguard, so read the "to destroy" count before merging.
+
+### 4. Least privilege for CI
+
+- **No stored AWS keys.** Both workflows assume IAM roles through GitHub
+  OIDC.
+- **Apply role** `github-actions-terraform`: trusted only for jobs that
+  declare the `aws-infra` GitHub Environment, which only the apply job does.
+- **Plan role** `github-actions-terraform-plan`: trusted for this repo's
+  `pull_request` subject, and read-only:
+
+  | Access | Scope |
+  |---|---|
+  | Read state | `live/prod/terraform.tfstate` only |
+  | Write | Only the `live/prod/terraform.tfstate.tflock` lock object |
+  | Amplify | `GetApp`, `GetBranch`, `GetDomainAssociation`, `ListTagsForResource` on the one app; `GetWebhook` |
+  | Route 53 | `GetHostedZone`, `ListTagsForResource` on the one zone |
+
+  The repo is public. Fork PRs never receive an OIDC token, but any branch
+  in this repo can edit workflows, which is why this role can't change
+  anything. When a new resource type makes a CI plan fail with
+  `AccessDenied`, add **the exact action it names** to the policy in
+  `bootstrap/main.tf` and re-apply bootstrap locally. Don't widen it to a
+  wildcard.
+- **The GitHub PAT never reaches PR jobs.** The plan passes a placeholder
+  `github_access_token`. `access_token` has `ignore_changes`, so its value
+  can't affect the plan. Only the apply job gets the real
+  `AMPLIFY_GITHUB_TOKEN` secret.
+
+### Secrets in public logs
+
+Actions logs and PR comments on a public repo are world-readable. The
+Amplify webhook URL contains a token that can start builds, and the AWS
+provider doesn't mark it sensitive. Both Terraform workflows therefore
+register it with `::add-mask::` before `plan`/`apply`. The plan workflow
+also redacts `token=…` from the PR comment, because masking only covers
+logs.
+
+### Running Terraform locally behind TLS-inspecting antivirus
+
+Antivirus that re-signs HTTPS traffic (e.g. Norton Web/Mail Shield) breaks
+local Terraform in two ways:
+
+- **Localhost.** Terraform talks to its provider plugins over TLS on
+  `127.0.0.1`. When that connection is intercepted, every command fails with
+  "Failed to load plugin schemas … Plugin did not respond".
+  `TF_LOG=trace` shows `x509: certificate signed by unknown authority`.
+  Exclude `127.0.0.1`/`localhost` from HTTPS scanning.
+- **Silent wrong data.** Anything computed from a certificate the machine
+  sees gets the antivirus's forged certificate instead. This is why
+  `bootstrap` no longer computes the GitHub OIDC `thumbprint_list` from a
+  `tls_certificate` lookup. AWS ignores thumbprints for GitHub's OIDC
+  endpoint, and the stored value stays as it is.
+
+The AWS CLI is also affected, because it ships its own trusted certificate
+authorities (`CERTIFICATE_VERIFY_FAILED`). Exclude `*.amazonaws.com` from
+HTTPS scanning.
+
+### Not yet covered
+
+- Pinning the Terraform version in CI, and removing the unused DynamoDB
+  lock table.
+- Narrowing the **apply** role, which still has `amplify:*` and broad
+  Route 53 access on `*`, and adding `default_tags`.
+- Static analysis (tflint/checkov).
 
 ### `deploy-targets.yml` controls which clouds deploy
 
