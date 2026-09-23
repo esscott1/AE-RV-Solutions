@@ -369,6 +369,31 @@ resource "aws_api_gateway_deployment" "chat" {
     ]))
   }
 
+  # A deployment is a snapshot of the API's configuration at the moment it's
+  # created, so it must come after every change it's meant to capture. The
+  # trigger above references none of these resources, so without this
+  # Terraform created the deployment before an integration update had
+  # finished, and the stage kept serving the old configuration.
+  depends_on = [
+    aws_api_gateway_model.chat_request,
+    aws_api_gateway_request_validator.body,
+    aws_api_gateway_method.chat_post,
+    aws_api_gateway_integration.chat_post,
+    aws_api_gateway_method_response.chat_post_200,
+    aws_api_gateway_method_response.chat_post_502,
+    aws_api_gateway_integration_response.chat_post_200,
+    aws_api_gateway_integration_response.chat_post_error,
+    aws_api_gateway_method.status_get,
+    aws_api_gateway_integration.status_get,
+    aws_api_gateway_method_response.status_get_200,
+    aws_api_gateway_integration_response.status_get_200,
+    aws_api_gateway_method.options,
+    aws_api_gateway_integration.options,
+    aws_api_gateway_method_response.options_200,
+    aws_api_gateway_integration_response.options_200,
+    aws_api_gateway_gateway_response.errors,
+  ]
+
   lifecycle {
     create_before_destroy = true
   }
