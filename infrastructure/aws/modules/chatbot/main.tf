@@ -12,6 +12,10 @@ locals {
 
   flag_name = "/ae-rv/chatbot/enabled"
 
+  # Built rather than looked up: a data "aws_sns_topic" lookup needs
+  # sns:ListTopics across the whole account.
+  owner_alerts_topic_arn = "arn:aws:sns:${local.region}:${local.account_id}:${var.owner_alerts_topic_name}"
+
   # Fixed replies. Every route except `answer` returns one of these verbatim:
   # the model never writes a safety, emergency, decline, or offline message.
   replies = {

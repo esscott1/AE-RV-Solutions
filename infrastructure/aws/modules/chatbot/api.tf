@@ -446,10 +446,6 @@ resource "aws_api_gateway_usage_plan_key" "site" {
 
 # --- Usage-spike alert to the owner --------------------------------------
 
-data "aws_sns_topic" "owner_alerts" {
-  name = var.owner_alerts_topic_name
-}
-
 resource "aws_cloudwatch_metric_alarm" "usage_spike" {
   alarm_name        = "${var.name_prefix}-usage-spike"
   alarm_description = "More than ${var.spike_alarm_threshold} chatbot requests in an hour. If this isn't real customer traffic, switch the chatbot off with the 'Chatbot on/off' GitHub workflow."
@@ -467,6 +463,6 @@ resource "aws_cloudwatch_metric_alarm" "usage_spike" {
   comparison_operator = "GreaterThanThreshold"
   threshold           = var.spike_alarm_threshold
   treat_missing_data  = "notBreaching"
-  alarm_actions       = [data.aws_sns_topic.owner_alerts.arn]
+  alarm_actions       = [local.owner_alerts_topic_arn]
   tags                = var.tags
 }

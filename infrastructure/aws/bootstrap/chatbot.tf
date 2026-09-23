@@ -137,11 +137,13 @@ data "aws_iam_policy_document" "github_actions_terraform_chatbot" {
     resources = [local.chatbot_alarm_arn]
   }
 
+  # The AWS provider validates the definition during plan and apply. AWS
+  # authorizes this only on stateMachine:*, not on a named machine.
   statement {
-    sid       = "ReadOwnerAlertTopic"
+    sid       = "ValidateStateMachineDefinition"
     effect    = "Allow"
-    actions   = ["sns:GetTopicAttributes", "sns:ListTagsForResource"]
-    resources = [aws_sns_topic.owner_alerts.arn]
+    actions   = ["states:ValidateStateMachineDefinition"]
+    resources = ["arn:aws:states:${var.region}:${local.account_id}:stateMachine:*"]
   }
 
   # List/describe calls that AWS only authorizes on "*".
@@ -209,10 +211,10 @@ data "aws_iam_policy_document" "github_actions_terraform_plan_chatbot" {
   }
 
   statement {
-    sid       = "ReadOwnerAlertTopic"
+    sid       = "ValidateStateMachineDefinition"
     effect    = "Allow"
-    actions   = ["sns:GetTopicAttributes", "sns:ListTagsForResource"]
-    resources = [aws_sns_topic.owner_alerts.arn]
+    actions   = ["states:ValidateStateMachineDefinition"]
+    resources = ["arn:aws:states:${var.region}:${local.account_id}:stateMachine:*"]
   }
 
   statement {
