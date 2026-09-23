@@ -1,0 +1,71 @@
+name: Site CI
+
+# PR gate for the site: `astro check` + `astro build` must pass before a PR
+# can merge into main. Both jobs are required status checks in the repo's
+# ruleset on main.
+#
+# Deliberately no `paths:` filter. A required check that never starts leaves
+# the PR stuck on "Expected - waiting", so this runs on every PR and the
+# `changes` job decides whether a build is needed. A job skipped by its `if:`
+# reports success, so infrastructure-only PRs merge normally. `changes` is
+# itself required so that if it errors, the skipped build can't pass for it.
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: site-ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      site: ${{ steps.diff.outputs.site }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          # The test merge commit plus its first parent (the base branch tip).
+          fetch-depth: 2
+
+      - name: Detect site changes
+        id: diff
+        # HEAD is GitHub's test merge commit and HEAD^1 is main, so this diff
+        # is exactly what the PR changes.
+        run: |
+          if git diff --name-only HEAD^1 HEAD | grep -qE '^(site/|\.github/workflows/site-ci\.yml$)'; then
+            echo "site=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "site=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  site-build:
+    needs: changes
+    if: needs.changes.outputs.site == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: site/.nvmrc
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run check
+
+      - name: Build
+        run: npm run build

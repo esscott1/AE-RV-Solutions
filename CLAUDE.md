@@ -63,9 +63,11 @@ npm install
 npm run dev       # http://localhost:4321
 npm run build     # outputs to dist/
 npm run preview   # serve the production build locally
+npm run check     # astro check: type/diagnostic check, run by Site CI on PRs
 ```
 
-There is no test suite or linter configured yet.
+There is no test suite or linter configured yet; `npm run check` plus a
+successful build is the only automated gate.
 
 ## Conventions
 
@@ -97,3 +99,9 @@ pull request preview deployments.
 
 Both workflow triggers are path **allow-lists**, so a change outside those
 paths deploys nothing.
+
+`main` is protected by a repo ruleset: every change goes through a PR (no
+direct pushes, no bypass), and the `changes` and `site-build` jobs from
+`site-ci.yml` must pass before merging. `site-ci.yml` runs on every PR, not
+only site PRs, and skips the build when `site/**` is untouched, because a
+path-filtered required check would never start and would block the PR.
