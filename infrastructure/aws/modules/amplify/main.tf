@@ -49,6 +49,12 @@ resource "aws_amplify_app" "this" {
     # a spurious in-place update of access_token. Rotating the token means
     # updating the secret and removing this ignore for one apply.
     ignore_changes = [access_token]
+
+    # prevent_destroy (here, on the branch, and on the domain association)
+    # makes any plan that would destroy or replace the live site fail on the
+    # PR instead of applying on merge. To tear down deliberately, remove it
+    # in its own PR first.
+    prevent_destroy = true
   }
 }
 
@@ -61,6 +67,10 @@ resource "aws_amplify_branch" "this" {
   # the webhook below, gated through a GitHub Actions workflow that skips
   # infrastructure-only changes. See infrastructure/README.md.
   enable_auto_build = false
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_amplify_webhook" "deploy" {
@@ -104,4 +114,10 @@ resource "aws_amplify_domain_association" "this" {
   # hardcoded 15m with no configurable `timeouts` block, so leaving it on
   # risks red CI runs for reasons unrelated to the change being applied.
   wait_for_verification = false
+
+  # Also covers count dropping to 0: blanking domain_name fails the plan
+  # rather than silently dropping the live domain.
+  lifecycle {
+    prevent_destroy = true
+  }
 }

@@ -7,6 +7,12 @@ locals {
 
 resource "aws_s3_bucket" "tfstate" {
   bucket = local.state_bucket_name
+
+  # Holds every stack's state. To tear it down deliberately, remove this in
+  # its own change first.
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_s3_bucket_versioning" "tfstate" {
@@ -50,14 +56,15 @@ resource "aws_dynamodb_table" "tfstate_lock" {
 # --- GitHub Actions OIDC: lets terraform-aws.yml assume an AWS role without
 # any stored long-lived access keys. ---
 
-data "tls_certificate" "github_actions" {
-  url = "https://token.actions.githubusercontent.com"
-}
-
+# No thumbprint_list. AWS validates GitHub's OIDC endpoint against its own
+# trusted CA library and ignores thumbprints for it, and the argument is
+# optional + computed, so AWS keeps the value already stored. The old
+# tls_certificate lookup computed it from whatever certificate this machine
+# saw, and a TLS-intercepting antivirus substituted its own forged cert's
+# fingerprint.
 resource "aws_iam_openid_connect_provider" "github_actions" {
-  url             = "https://token.actions.githubusercontent.com"
-  client_id_list  = ["sts.amazonaws.com"]
-  thumbprint_list = [data.tls_certificate.github_actions.certificates[0].sha1_fingerprint]
+  url            = "https://token.actions.githubusercontent.com"
+  client_id_list = ["sts.amazonaws.com"]
 }
 
 data "aws_iam_policy_document" "github_actions_trust" {
@@ -176,4 +183,113 @@ resource "aws_iam_role_policy" "github_actions_terraform" {
   name   = "terraform-apply"
   role   = aws_iam_role.github_actions_terraform.id
   policy = data.aws_iam_policy_document.github_actions_terraform.json
+}
+
+# --- Read-only plan role: lets terraform-aws-plan.yml run `terraform plan`
+# on pull requests. ---
+
+data "aws_iam_policy_document" "github_actions_plan_trust" {
+  statement {
+    effect  = "Allow"
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+
+    principals {
+      type        = "Federated"
+      identifiers = [aws_iam_openid_connect_provider.github_actions.arn]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+
+    # The repo-wide pull_request subject, with the same wildcards as the apply
+    # role above to match GitHub's immutable-ID sub format. The repo is
+    # public, but fork PRs never receive an OIDC token, so only branches in
+    # this repo can reach this role. Any workflow on such a branch can,
+    # though, which is why everything below is read-only (apart from the
+    # state lock object).
+    condition {
+      test     = "StringLike"
+      variable = "token.actions.githubusercontent.com:sub"
+      values   = ["repo:${split("/", var.github_repository)[0]}*/${split("/", var.github_repository)[1]}*:pull_request"]
+    }
+  }
+}
+
+resource "aws_iam_role" "github_actions_terraform_plan" {
+  name               = "github-actions-terraform-plan"
+  assume_role_policy = data.aws_iam_policy_document.github_actions_plan_trust.json
+}
+
+data "aws_iam_policy_document" "github_actions_terraform_plan" {
+  statement {
+    sid       = "ReadProdState"
+    effect    = "Allow"
+    actions   = ["s3:GetObject"]
+    resources = ["${aws_s3_bucket.tfstate.arn}/live/prod/terraform.tfstate"]
+  }
+
+  statement {
+    sid       = "StateBucketList"
+    effect    = "Allow"
+    actions   = ["s3:ListBucket"]
+    resources = [aws_s3_bucket.tfstate.arn]
+  }
+
+  # Native S3 locking (use_lockfile) writes and then deletes this one object,
+  # so plan needs to write it. This is the only write access the role has.
+  statement {
+    sid    = "ProdStateLock"
+    effect = "Allow"
+    actions = [
+      "s3:GetObject",
+      "s3:PutObject",
+      "s3:DeleteObject",
+    ]
+    resources = ["${aws_s3_bucket.tfstate.arn}/live/prod/terraform.tfstate.tflock"]
+  }
+
+  # Refresh reads only, scoped to the one app and zone live/prod manages.
+  # When the first plan hits an AccessDenied, add the exact action it names
+  # rather than widening to a wildcard.
+  statement {
+    sid    = "ReadAmplifyApp"
+    effect = "Allow"
+    actions = [
+      "amplify:GetApp",
+      "amplify:GetBranch",
+      "amplify:GetDomainAssociation",
+      "amplify:ListTagsForResource",
+    ]
+    resources = [
+      "arn:aws:amplify:${var.region}:${data.aws_caller_identity.current.account_id}:apps/${var.amplify_app_id}",
+      "arn:aws:amplify:${var.region}:${data.aws_caller_identity.current.account_id}:apps/${var.amplify_app_id}/*",
+    ]
+  }
+
+  statement {
+    sid       = "ReadAmplifyWebhook"
+    effect    = "Allow"
+    actions   = ["amplify:GetWebhook"]
+    resources = ["arn:aws:amplify:${var.region}:${data.aws_caller_identity.current.account_id}:webhooks/*"]
+  }
+
+  # Route 53 is global: no region or account in the ARN.
+  statement {
+    sid    = "ReadHostedZone"
+    effect = "Allow"
+    actions = [
+      "route53:GetHostedZone",
+      "route53:ListTagsForResource",
+    ]
+    resources = ["arn:aws:route53:::hostedzone/${var.hosted_zone_id}"]
+  }
+}
+
+resource "aws_iam_role_policy" "github_actions_terraform_plan" {
+  name   = "terraform-plan"
+  role   = aws_iam_role.github_actions_terraform_plan.id
+  policy = data.aws_iam_policy_document.github_actions_terraform_plan.json
 }
