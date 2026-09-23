@@ -173,6 +173,17 @@
   font-size: 0.85rem;
 }
 
+/* Where an answer came from: A&E's knowledge base and/or general
+   knowledge. */
+/* --pine-900, not the lighter --sage-600: this is small text, and it needs
+   4.5:1 contrast against the bubble. */
+.chat-widget__message .chat-widget__source {
+  margin-top: 0.4rem;
+  color: var(--pine-900);
+  font-size: 0.75rem;
+  font-style: italic;
+}
+
 .chat-widget__typing {
   align-self: flex-start;
   margin: 0;

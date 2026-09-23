@@ -9,10 +9,12 @@ const CHAT_API_KEY = import.meta.env.PUBLIC_CHAT_API_KEY;
 
 export const chatConfigured = Boolean(CHAT_API_URL && CHAT_API_KEY);
 
+const SOURCES = new Set(['knowledge_base', 'both', 'general']);
+
 const UNAVAILABLE = {
   route: 'unavailable',
   reply:
-    "Sorry, I can't answer right now. Please try again later or contact A&E RV Solutions directly.",
+    "Sorry, I can't answer right now. Please try again later or contact us directly.",
 };
 
 // Whether the chatbot is switched on. Any failure counts as off, the same
@@ -29,10 +31,12 @@ export async function getChatStatus() {
   }
 }
 
-// Sends the conversation and returns {route, reply}. It never throws. The
-// API answers errors (400 invalid, 429 busy, 502 unavailable) in the same
-// {route, reply} shape, so those are passed through. Anything else becomes
-// a generic "unavailable" reply.
+// Sends the conversation and returns {route, reply, source}. It never
+// throws. `source` comes only with answers: "knowledge_base", "both", or
+// "general" (see modules/chatbot); otherwise it's undefined. The API answers
+// errors (400 invalid, 429 busy, 502 unavailable) in the same {route, reply}
+// shape, so those are passed through. Anything else becomes a generic
+// "unavailable" reply.
 export async function sendChatMessage(messages) {
   if (!chatConfigured) return UNAVAILABLE;
   try {
@@ -43,7 +47,8 @@ export async function sendChatMessage(messages) {
     });
     const body = await res.json().catch(() => null);
     if (body && typeof body.route === 'string' && typeof body.reply === 'string') {
-      return { route: body.route, reply: body.reply };
+      const source = SOURCES.has(body.source) ? body.source : undefined;
+      return { route: body.route, reply: body.reply, source };
     }
     return UNAVAILABLE;
   } catch {
