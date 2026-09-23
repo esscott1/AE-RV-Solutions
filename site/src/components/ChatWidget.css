@@ -1,0 +1,254 @@
+/* Styles for the ChatWidget React island. JSX has no scoped <style> and
+   inline styles are off-limits (CLAUDE.md), so the island imports this
+   sheet. Every class is prefixed .chat-widget__ because, unlike an .astro
+   <style>, it applies globally. Colours come from the tokens in
+   src/styles/global.css. */
+
+.chat-widget {
+  position: fixed;
+  right: 1.25rem;
+  bottom: 1.25rem;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.75rem;
+  font-family: var(--font-body);
+}
+
+.chat-widget__launcher {
+  min-height: 48px;
+  padding: 0.75rem 1.25rem;
+  border: 0;
+  border-radius: 999px;
+  background: var(--clay-700);
+  color: var(--canvas-50);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(14, 21, 18, 0.25);
+  transition: background-color 0.15s ease;
+}
+
+.chat-widget__launcher:hover {
+  background: var(--pine-900);
+}
+
+.chat-widget__panel {
+  display: flex;
+  flex-direction: column;
+  width: 380px;
+  max-height: min(600px, calc(100vh - 7rem));
+  background: var(--canvas-50);
+  border: 1px solid var(--sage-200);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(14, 21, 18, 0.22);
+  overflow: hidden;
+}
+
+.chat-widget__header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: var(--pine-950);
+  color: var(--canvas-50);
+}
+
+.chat-widget__title {
+  flex: 1;
+  font-family: var(--font-display);
+  font-weight: 500;
+}
+
+.chat-widget__text-button,
+.chat-widget__close {
+  border: 0;
+  background: transparent;
+  color: var(--canvas-50);
+  font: inherit;
+  cursor: pointer;
+}
+
+.chat-widget__text-button {
+  font-size: 0.85rem;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.chat-widget__close {
+  min-width: 32px;
+  min-height: 32px;
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.chat-widget__text-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.chat-widget__state,
+.chat-widget__notice {
+  margin: 0;
+  padding: 1rem;
+  color: var(--pine-900);
+}
+
+.chat-widget__notice {
+  padding: 0.6rem 1rem;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  background: var(--canvas-100);
+  border-bottom: 1px solid var(--sage-200);
+}
+
+.chat-widget__messages {
+  flex: 1;
+  min-height: 160px;
+  overflow-y: auto;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.chat-widget__hint {
+  margin: 0;
+  color: var(--sage-600);
+  font-size: 0.9rem;
+}
+
+.chat-widget__message {
+  max-width: 88%;
+  padding: 0.6rem 0.8rem;
+  border-radius: 10px;
+  color: var(--pine-950);
+  font-size: 0.95rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.chat-widget__message p,
+.chat-widget__message ul,
+.chat-widget__message ol {
+  margin: 0;
+}
+
+.chat-widget__message p + p,
+.chat-widget__message p + ul,
+.chat-widget__message p + ol,
+.chat-widget__message ul + p,
+.chat-widget__message ol + p {
+  margin-top: 0.5rem;
+}
+
+.chat-widget__message ul,
+.chat-widget__message ol {
+  padding-left: 1.2rem;
+}
+
+.chat-widget__message--user {
+  align-self: flex-end;
+  background: var(--sage-200);
+  white-space: pre-wrap;
+}
+
+.chat-widget__message--assistant {
+  align-self: flex-start;
+  background: var(--canvas-100);
+}
+
+/* Technician referrals and emergency messages must read as warnings, not
+   ordinary chat. */
+.chat-widget__message--safety {
+  border-left: 4px solid var(--clay-700);
+  background: var(--canvas-100);
+}
+
+.chat-widget__safety-label {
+  margin: 0 0 0.3rem;
+  color: var(--clay-700);
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.chat-widget__typing {
+  align-self: flex-start;
+  margin: 0;
+  padding: 0.4rem 0.8rem;
+  border-radius: 10px;
+  background: var(--canvas-100);
+  color: var(--sage-600);
+  letter-spacing: 0.2em;
+}
+
+.chat-widget__form {
+  padding: 0.75rem 1rem 1rem;
+  border-top: 1px solid var(--sage-200);
+}
+
+.chat-widget__input {
+  width: 100%;
+  resize: none;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--sage-600);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--pine-950);
+  font: inherit;
+  font-size: 0.95rem;
+}
+
+.chat-widget__form-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.chat-widget__counter {
+  color: var(--sage-600);
+  font-size: 0.8rem;
+}
+
+.chat-widget__send {
+  min-height: 40px;
+  padding: 0.5rem 1.25rem;
+  border: 0;
+  border-radius: 6px;
+  background: var(--clay-700);
+  color: var(--canvas-50);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.chat-widget__send:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.chat-widget__sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Phones: the panel becomes a sheet across the bottom of the screen. */
+@media (max-width: 640px) {
+  .chat-widget {
+    right: 0.75rem;
+    bottom: 0.75rem;
+    left: 0.75rem;
+  }
+
+  .chat-widget__panel {
+    width: 100%;
+    max-height: calc(100vh - 6rem);
+  }
+}
