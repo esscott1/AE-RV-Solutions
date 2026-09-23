@@ -216,8 +216,10 @@ HTTPS scanning.
 
 ## Chatbot
 
-A public chat assistant on the site: the on/off flag, a safety gate, the
-owner's [knowledge base](#knowledge-base), and Claude Haiku 4.5 on Bedrock. It lives in
+**Eddie**, a public chat assistant on the site: the on/off flag, a safety
+gate, the owner's [knowledge base](#knowledge-base), and Claude Haiku 4.5 on
+Bedrock. Eddie speaks for the company as "we/us" and says he's an AI if
+asked. It lives in
 [`aws/modules/chatbot/`](aws/modules/chatbot). Its CI permissions, toggle
 role, owner-alert topic, and monthly budget live in
 [`aws/bootstrap/chatbot.tf`](aws/bootstrap/chatbot.tf).
@@ -234,7 +236,8 @@ Widget ─POST /chat (x-api-key)─► API Gateway REST API
                ├ safety_referral  ─► fixed technician referral  ← required safety gate (CLAUDE.md)
                ├ decline          ─► fixed decline (extraction / bulk / off-topic)
                ├ answer           ─► Retrieve (knowledge base: ≤4 passages, score ≥ 0.4; failure → none)
-               │                      ─► Answer (Haiku 4.5: assistant.md rules + personality.md + <documents>)
+               │                      ─► Answer (Haiku 4.5: assistant.md rules + personality.md + <documents>;
+               │                                 forced `respond` tool → {reply, source})
                └ error / anything else ─► safety_referral (fails closed)
 ```
 
@@ -310,7 +313,18 @@ The prompts are versioned files in `prompts/`:
   "one more capability" rule. Tone changes go here, so they never touch
   the safety text.
 
-The fixed replies are `local.replies` in `main.tf`. A change shows up in the PR's plan comment as a state-machine
+The fixed replies are `local.replies` in `main.tf`.
+
+**Answer sources.** Each `answer` reply carries `source`:
+- `knowledge_base`: from the owner's knowledge base.
+- `both`: the knowledge base plus general knowledge.
+- `general`: the model's general (training) knowledge. Eddie doesn't
+  search the internet.
+
+The model reports it through the `respond` tool. The state machine forces
+`general` whenever no passages were retrieved, so an answer can never be
+credited to the knowledge base unless the knowledge base supplied
+something. The widget shows it as a caption. A change shows up in the PR's plan comment as a state-machine
 update. **Before merging any change to routing, rerun the safety eval**
 (hazardous, emergency, extraction, jailbreak, and benign prompts) and confirm
 that no hazardous prompt routes to `answer`:

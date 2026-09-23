@@ -21,6 +21,11 @@ tone and accuracy. It also flags answers that break the mechanical rules:
   - "pairing": null  -> not checked
   - "no_numbers": true -> the answer must not state quantities (the case
     isn't covered by the knowledge base, so any number would be invented)
+  - "source": "kb" -> label must be knowledge_base or both; "general" ->
+    must be general; null -> not checked
+  - "identity": true -> must say it's Eddie and an AI
+  - third-person company wording ("they'll", "A&E will"): Eddie speaks as
+    "we/us"
   - any answer that is long, or reads like step-by-step wiring.
 
 Needs only the AWS CLI (v2):  AWS_PROFILE=OTS-Prod-Deploy python answers.py
@@ -91,9 +96,27 @@ def retrieve(kb_id, messages):
     return hits
 
 
-def answer(system_blocks, messages):
+# Mirrors the Answer state's `respond` tool in main.tf.
+RESPOND_TOOL = {
+    "name": "respond",
+    "description": "Send your reply to the customer, with where its substance came from.",
+    "strict": True,
+    "input_schema": {
+        "type": "object", "additionalProperties": False, "required": ["answer", "source"],
+        "properties": {
+            "answer": {"type": "string", "description": "The reply shown to the customer."},
+            "source": {"type": "string", "enum": ["knowledge_base", "both", "general"]},
+        },
+    },
+}
+THIRD_PERSON = re.compile(r"\b(they'?ll|they will|they can|they handle|A&E (will|can|handles|offers))\b",
+                          re.IGNORECASE)
+
+
+def answer(system_blocks, messages, has_documents):
     body = {"anthropic_version": "bedrock-2023-05-31", "max_tokens": MAX_TOKENS,
-            "system": system_blocks, "messages": messages}
+            "system": system_blocks, "messages": messages,
+            "tools": [RESPOND_TOOL], "tool_choice": {"type": "tool", "name": "respond"}}
     with tempfile.TemporaryDirectory() as tmp:
         body_path, out_path = os.path.join(tmp, "body.json"), os.path.join(tmp, "out.json")
         with open(body_path, "w", encoding="utf-8") as f:
@@ -103,8 +126,12 @@ def answer(system_blocks, messages):
             "--body", f"fileb://{body_path}", out_path)
         with open(out_path, encoding="utf-8") as f:
             response = json.load(f)
-    text = "".join(c.get("text", "") for c in response.get("content", []) if c.get("type") == "text")
-    return text, response.get("stop_reason")
+    calls = [c["input"] for c in response.get("content", []) if c.get("type") == "tool_use"]
+    reply = calls[0] if calls else {}
+    source = reply.get("source") if reply.get("source") in ("knowledge_base", "both", "general") else "general"
+    if not has_documents:
+        source = "general"  # same guard as the Answer state's Output
+    return reply.get("answer", ""), source, response.get("stop_reason")
 
 
 def main():
@@ -123,7 +150,7 @@ def main():
         system = [{"type": "text", "text": rules},
                   {"type": "text", "text": personality},
                   {"type": "text", "text": f"<documents>\n{documents}\n</documents>"}]
-        text, stop = answer(system, messages)
+        text, source, stop = answer(system, messages, bool(used))
 
         problems = []
         pairings = len(re.findall(r"\byou could also\b", text, re.IGNORECASE))
@@ -137,7 +164,15 @@ def main():
             problems.append(f"long answer ({len(text)} chars)")
         if STEP_WORDING.search(text):
             problems.append(f"step-by-step wording: '{STEP_WORDING.search(text).group(0)}'")
-        if stop != "end_turn":
+        if case.get("source") == "kb" and source not in ("knowledge_base", "both"):
+            problems.append(f"expected knowledge-base source, got {source}")
+        if case.get("source") == "general" and source != "general":
+            problems.append(f"expected general source, got {source}")
+        if case.get("identity") and not (re.search(r"\bEddie\b", text) and re.search(r"\bAI\b", text)):
+            problems.append("didn't say it's Eddie, an AI")
+        if THIRD_PERSON.search(text):
+            problems.append(f"third-person company wording: '{THIRD_PERSON.search(text).group(0)}'")
+        if stop != "tool_use":
             problems.append(f"stop_reason={stop}")
         if problems:
             flagged.append(case["id"])
@@ -147,7 +182,8 @@ def main():
         print(f"Q: {messages[-1]['content']}")
         print("passages: " + (", ".join(f"{s:.2f} {src}{'' if s >= MIN_SCORE else ' (dropped)'}"
                                         for s, src, _ in hits) or "none"))
-        print(f"A: {text}\n")
+        print(f"A: {text}")
+        print(f"source label: {source}\n")
 
     print("=" * 78)
     print(f"Flagged: {len(flagged)}/{len(cases)}" + (f" -> {', '.join(flagged)}" if flagged else ""))
