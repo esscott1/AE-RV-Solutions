@@ -222,11 +222,16 @@ resource "aws_api_gateway_integration" "status_get" {
   http_method             = aws_api_gateway_method.status_get.http_method
   type                    = "AWS"
   integration_http_method = "POST"
-  uri                     = "arn:aws:apigateway:${local.region}:ssm:action/GetParameter"
-  credentials             = aws_iam_role.apigw.arn
-  passthrough_behavior    = "NEVER"
+  # SSM speaks only the JSON protocol: the operation goes in X-Amz-Target and
+  # the body is JSON. An action-style URI (…:ssm:action/GetParameter) sends
+  # the query protocol instead: SSM never sees the parameter name, and it
+  # rejects the call as GetParameter on "*".
+  uri                  = "arn:aws:apigateway:${local.region}:ssm:path//"
+  credentials          = aws_iam_role.apigw.arn
+  passthrough_behavior = "NEVER"
   request_parameters = {
     "integration.request.header.Content-Type" = "'application/x-amz-json-1.1'"
+    "integration.request.header.X-Amz-Target" = "'AmazonSSM.GetParameter'"
   }
   request_templates = {
     "application/json" = jsonencode({ Name = local.flag_name })
@@ -239,18 +244,6 @@ resource "aws_api_gateway_method_response" "status_get_200" {
   http_method         = aws_api_gateway_method.status_get.http_method
   status_code         = "200"
   response_parameters = { "method.response.header.Access-Control-Allow-Origin" = true }
-}
-
-# A second 200 response for errors used to be declared here. Both pointed
-# at the same AWS object, so destroying it would also delete the response
-# above. This drops it from state without touching AWS. It can be deleted
-# once applied.
-removed {
-  from = aws_api_gateway_integration_response.status_get_error
-
-  lifecycle {
-    destroy = false
-  }
 }
 
 # One response for every outcome: API Gateway keeps a single integration
@@ -358,21 +351,22 @@ resource "aws_api_gateway_gateway_response" "errors" {
 resource "aws_api_gateway_deployment" "chat" {
   rest_api_id = aws_api_gateway_rest_api.chat.id
 
-  # TEMPORARY, step 1 of 2: pinned to the live deployment's trigger. Forgetting
-  # status_get_error (the removed block above) and replacing this
-  # create_before_destroy deployment in the same apply forms a dependency
-  # cycle, so this apply doesn't redeploy. Nothing in it changes the live API.
-  #
-  # Step 2 (the next PR) switches to a config-only hash and deletes the
-  # removed block:
-  #   sha1(jsonencode([filesha1("${path.module}/api.tf"), local.replies,
-  #     local.flag_name, aws_sfn_state_machine.flow.arn, var.max_messages,
-  #     var.max_user_message_chars, var.max_assistant_message_chars]))
-  # Hashing whole resources, as the first version did, redeployed on every
-  # plan because AWS fills in fields such as cache_key_parameters after
-  # creation.
+  # Redeploy whenever the API's configuration changes. It hashes this file
+  # plus the values its templates and schema use. Hashing the resources
+  # themselves would redeploy on every plan: AWS fills in fields such as
+  # cache_key_parameters after creation, which changes the hash. .tf files
+  # check out as LF everywhere (.gitattributes), so the hash is the same
+  # locally and in CI.
   triggers = {
-    redeployment = "bbd20a95ba0ccee8af7c83600217c25afbd813cf"
+    redeployment = sha1(jsonencode([
+      filesha1("${path.module}/api.tf"),
+      local.replies,
+      local.flag_name,
+      aws_sfn_state_machine.flow.arn,
+      var.max_messages,
+      var.max_user_message_chars,
+      var.max_assistant_message_chars,
+    ]))
   }
 
   lifecycle {

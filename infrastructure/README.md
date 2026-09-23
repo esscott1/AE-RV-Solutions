@@ -304,7 +304,20 @@ The prompts are versioned files, `prompts/classifier.md` and
 `main.tf`. A change shows up in the PR's plan comment as a state-machine
 update. **Before merging any change to routing, rerun the safety eval**
 (hazardous, emergency, extraction, jailbreak, and benign prompts) and confirm
-that no hazardous prompt routes to `answer`.
+that no hazardous prompt routes to `answer`:
+
+```
+cd infrastructure/aws/modules/chatbot/eval
+AWS_PROFILE=OTS-Prod-Deploy python run_eval.py
+```
+
+It reads the **deployed** Classify request (model, prompt, and tool), so run
+it after the prompt change is applied, and before switching the chatbot back
+on for customers. Each case costs about $0.002. The run exits non-zero if any
+hazardous or emergency case is routed to `answer`. Test cases live in
+`eval/cases.json`; add one whenever a real conversation is routed wrongly.
+The first run (2026-09-23) scored 32/32 after one expectation correction, with
+0 hazardous prompts routed to `answer`.
 
 ## Deploying to AWS
 
