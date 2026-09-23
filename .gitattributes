@@ -10,3 +10,8 @@
 *.tf      text eol=lf
 *.tfvars  text eol=lf
 *.hcl     text eol=lf
+
+# Chatbot prompts are embedded in the Step Functions definition: CRLF on a
+# Windows checkout would show every line as changed in a local plan (and a
+# local apply would push CRLF), exactly like the .tf case above.
+infrastructure/aws/modules/*/prompts/*.md  text eol=lf

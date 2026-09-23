@@ -241,6 +241,22 @@ resource "aws_api_gateway_method_response" "status_get_200" {
   response_parameters = { "method.response.header.Access-Control-Allow-Origin" = true }
 }
 
+# A second 200 response for errors used to be declared here. Both pointed
+# at the same AWS object, so destroying it would also delete the response
+# above. This drops it from state without touching AWS. It can be deleted
+# once applied.
+removed {
+  from = aws_api_gateway_integration_response.status_get_error
+
+  lifecycle {
+    destroy = false
+  }
+}
+
+# One response for every outcome: API Gateway keeps a single integration
+# response per status code, and this default (no selection pattern) also
+# receives SSM errors. An error body has no Parameter.Value, so it reports
+# "off".
 resource "aws_api_gateway_integration_response" "status_get_200" {
   rest_api_id         = aws_api_gateway_rest_api.chat.id
   resource_id         = aws_api_gateway_resource.status.id
@@ -252,18 +268,6 @@ resource "aws_api_gateway_integration_response" "status_get_200" {
       {"enabled": #if($input.path('$.Parameter.Value') == "true")true#{else}false#end}
     EOT
   }
-
-  depends_on = [aws_api_gateway_integration.status_get]
-}
-
-resource "aws_api_gateway_integration_response" "status_get_error" {
-  rest_api_id         = aws_api_gateway_rest_api.chat.id
-  resource_id         = aws_api_gateway_resource.status.id
-  http_method         = aws_api_gateway_method.status_get.http_method
-  status_code         = aws_api_gateway_method_response.status_get_200.status_code
-  selection_pattern   = "4\\d{2}|5\\d{2}"
-  response_parameters = { "method.response.header.Access-Control-Allow-Origin" = "'*'" }
-  response_templates  = { "application/json" = jsonencode({ enabled = false }) }
 
   depends_on = [aws_api_gateway_integration.status_get]
 }
@@ -329,11 +333,13 @@ resource "aws_api_gateway_integration_response" "options_200" {
 
 locals {
   gateway_errors = {
-    QUOTA_EXCEEDED   = { status = "429", body = { route = "busy", reply = "We're getting a lot of questions right now. Please try again tomorrow or contact A&E RV Solutions directly." } }
-    THROTTLED        = { status = "429", body = { route = "busy", reply = "We're getting a lot of questions right now. Please wait a moment and try again." } }
-    BAD_REQUEST_BODY = { status = "400", body = { route = "invalid", reply = local.replies.invalid } }
-    DEFAULT_4XX      = { status = null, body = null }
-    DEFAULT_5XX      = { status = null, body = { route = "unavailable", reply = local.replies.unavailable } }
+    QUOTA_EXCEEDED   = { status = "429", template = jsonencode({ route = "busy", reply = "We're getting a lot of questions right now. Please try again tomorrow or contact A&E RV Solutions directly." }) }
+    THROTTLED        = { status = "429", template = jsonencode({ route = "busy", reply = "We're getting a lot of questions right now. Please wait a moment and try again." }) }
+    BAD_REQUEST_BODY = { status = "400", template = jsonencode({ route = "invalid", reply = local.replies.invalid }) }
+    DEFAULT_5XX      = { status = null, template = jsonencode({ route = "unavailable", reply = local.replies.unavailable }) }
+    # AWS's own default body, stated explicitly (an empty template gets
+    # filled in by AWS, a permanent plan diff). Only the CORS header is added.
+    DEFAULT_4XX = { status = null, template = "{\"message\":$context.error.messageString}" }
   }
 }
 
@@ -344,7 +350,7 @@ resource "aws_api_gateway_gateway_response" "errors" {
   status_code   = each.value.status
 
   response_parameters = { "gatewayresponse.header.Access-Control-Allow-Origin" = "'*'" }
-  response_templates  = each.value.body == null ? null : { "application/json" = jsonencode(each.value.body) }
+  response_templates  = { "application/json" = each.value.template }
 }
 
 # --- Deployment, stage, quota -------------------------------------------------
@@ -352,25 +358,21 @@ resource "aws_api_gateway_gateway_response" "errors" {
 resource "aws_api_gateway_deployment" "chat" {
   rest_api_id = aws_api_gateway_rest_api.chat.id
 
-  # Redeploy whenever anything that shapes the API changes.
+  # TEMPORARY, step 1 of 2: pinned to the live deployment's trigger. Forgetting
+  # status_get_error (the removed block above) and replacing this
+  # create_before_destroy deployment in the same apply forms a dependency
+  # cycle, so this apply doesn't redeploy. Nothing in it changes the live API.
+  #
+  # Step 2 (the next PR) switches to a config-only hash and deletes the
+  # removed block:
+  #   sha1(jsonencode([filesha1("${path.module}/api.tf"), local.replies,
+  #     local.flag_name, aws_sfn_state_machine.flow.arn, var.max_messages,
+  #     var.max_user_message_chars, var.max_assistant_message_chars]))
+  # Hashing whole resources, as the first version did, redeployed on every
+  # plan because AWS fills in fields such as cache_key_parameters after
+  # creation.
   triggers = {
-    redeployment = sha1(jsonencode([
-      aws_api_gateway_resource.chat,
-      aws_api_gateway_resource.status,
-      aws_api_gateway_model.chat_request,
-      aws_api_gateway_method.chat_post,
-      aws_api_gateway_integration.chat_post,
-      aws_api_gateway_integration_response.chat_post_200,
-      aws_api_gateway_integration_response.chat_post_error,
-      aws_api_gateway_method.status_get,
-      aws_api_gateway_integration.status_get,
-      aws_api_gateway_integration_response.status_get_200,
-      aws_api_gateway_integration_response.status_get_error,
-      aws_api_gateway_method.options,
-      aws_api_gateway_integration.options,
-      aws_api_gateway_integration_response.options_200,
-      aws_api_gateway_gateway_response.errors,
-    ]))
+    redeployment = "bbd20a95ba0ccee8af7c83600217c25afbd813cf"
   }
 
   lifecycle {

@@ -136,6 +136,13 @@ through a PR (no direct pushes, no force-push), and the `changes` and
 role has a PR-only bypass: a red PR can be force-merged (`gh pr merge --admin`
 or the web "bypass rules" checkbox), but direct pushes stay blocked even for
 admins. Never use `--admin` unless the user explicitly asks for an override.
+
+**Claude never merges or approves a pull request on its own.** Every merge
+needs the user's explicit OK for that specific PR, even when all checks are
+green. Merging deploys to production, since the Terraform apply and the site
+deploy both run on merge. Open the PR, report the checks and the plan, then
+stop and ask. This also covers approving environment deployments (e.g.
+`aws-infra`) and closing PRs that aren't Claude's own throwaway test PRs.
 Both PR workflows run on every PR and skip their real work when their paths
 are untouched, because a path-filtered required check would never start and
 would block the PR.
