@@ -1,11 +1,16 @@
 ---
-// Site menu: a hamburger button fixed to the top-right corner that opens a
-// small panel of links. A static component with a few lines of script, not a
-// React island: it only toggles a panel, so it doesn't need React.
+// Site menu: a hamburger button (top left, in BaseLayout's top bar) that
+// opens a small panel of links. A static component with a few lines of
+// script, not a React island.
+//
+// Items marked `requires` appear only for signed-in employees in that
+// Cognito group. That's display only: the pages and API check for
+// themselves.
 const links = [
   { href: '/', label: 'Home' },
   { href: '/testimonials/', label: 'Testimonials' },
   { href: '/employees/', label: 'Employees' },
+  { href: '/ai-stats/', label: 'AI Stats', requires: 'admins' },
 ];
 
 // Astro serves pages at /path/ (directory format), so normalize both sides
@@ -28,8 +33,8 @@ const current = trim(Astro.url.pathname);
   </button>
 
   <ul class="site-nav__menu" id="site-nav-menu" hidden>
-    {links.map(({ href, label }) => (
-      <li>
+    {links.map(({ href, label, requires }) => (
+      <li data-requires={requires} hidden={requires ? true : undefined}>
         <a
           class="site-nav__link"
           href={href}
@@ -43,6 +48,39 @@ const current = trim(Astro.url.pathname);
 </nav>
 
 <script>
+  // Shows signed-in items from the session oidc-client-ts keeps in
+  // sessionStorage ("oidc.user:<issuer>:<client>"), read directly so public
+  // pages don't load the sign-in library. auth.js announces sign-in and
+  // sign-out, so the menu updates without a reload.
+  function signedInGroups(): string[] {
+    try {
+      for (let i = 0; i < sessionStorage.length; i++) {
+        const key = sessionStorage.key(i);
+        if (!key?.startsWith('oidc.user:')) continue;
+        const user = JSON.parse(sessionStorage.getItem(key) ?? 'null');
+        if (!user?.expires_at || user.expires_at * 1000 < Date.now()) continue;
+        const groups = user.profile?.['cognito:groups'];
+        return Array.isArray(groups) ? groups : [];
+      }
+    } catch {
+      // Storage blocked or unreadable: treat as signed out.
+    }
+    return [];
+  }
+
+  function showSignedInItems() {
+    const groups = signedInGroups();
+    document.querySelectorAll<HTMLLIElement>('.site-nav__menu [data-requires]').forEach((item) => {
+      item.hidden = !groups.includes(item.dataset.requires ?? '');
+    });
+  }
+
+  showSignedInItems();
+  window.addEventListener('ae-rv-auth-change', showSignedInItems);
+  // Another tab signing out doesn't share sessionStorage, but a page
+  // restored from the back/forward cache should re-check.
+  window.addEventListener('pageshow', showSignedInItems);
+
   const nav = document.querySelector<HTMLElement>('.site-nav');
   const toggle = nav?.querySelector<HTMLButtonElement>('.site-nav__toggle');
   const menu = nav?.querySelector<HTMLUListElement>('.site-nav__menu');
@@ -136,7 +174,8 @@ const current = trim(Astro.url.pathname);
     box-shadow: 0 12px 32px rgba(14, 21, 18, 0.22);
   }
 
-  .site-nav__menu[hidden] {
+  .site-nav__menu[hidden],
+  .site-nav__menu li[hidden] {
     display: none;
   }
 

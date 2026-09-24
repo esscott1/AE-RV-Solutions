@@ -20,6 +20,13 @@ export const signInConfigured = Boolean(
 // /employees/ is registered on the Cognito app client.
 const pageUrl = () => `${window.location.origin}/employees/`;
 
+// SiteNav listens for this to show or hide its signed-in menu items. It
+// reads the session itself, so public pages don't load this module.
+export const AUTH_CHANGE_EVENT = 'ae-rv-auth-change';
+function announceAuthChange() {
+  window.dispatchEvent(new Event(AUTH_CHANGE_EVENT));
+}
+
 let manager;
 function userManager() {
   manager ??= new UserManager({
@@ -43,7 +50,9 @@ export async function completeSignIn() {
   const params = new URLSearchParams(window.location.search);
   if (!params.has('state') || !(params.has('code') || params.has('error'))) return null;
   try {
-    return await userManager().signinRedirectCallback();
+    const user = await userManager().signinRedirectCallback();
+    announceAuthChange();
+    return user;
   } finally {
     window.history.replaceState(null, '', pageUrl());
   }
@@ -96,6 +105,7 @@ export function signIn() {
 // asks for credentials again.
 export async function signOut() {
   await userManager().removeUser();
+  announceAuthChange();
   const query = new URLSearchParams({ client_id: CLIENT_ID, logout_uri: pageUrl() });
   window.location.assign(`https://${DOMAIN}/logout?${query}`);
 }

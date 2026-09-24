@@ -98,13 +98,6 @@ export default function EmployeeSignIn() {
   return (
     <div className="employee-sign-in">
       <h1 className="employee-sign-in__title">{me.title}</h1>
-      {me.isAdmin && (
-        <p>
-          <a className="employee-sign-in__link" href="/admin/">
-            Admin: AI usage and conversations
-          </a>
-        </p>
-      )}
       {me.body && <p>{me.body}</p>}
       <AccountSecurity accessToken={user.access_token} email={me.email} />
     </div>

@@ -3,7 +3,7 @@ import { currentUser, signIn, signInConfigured } from '../lib/auth.js';
 import { getAdminConversations, getAdminUsage } from '../lib/api.js';
 import './AdminPanel.css';
 
-// The /admin/ page: Eddie's usage and chat conversations, for the admins
+// The /ai-stats/ page ("AI Stats"): Eddie's usage and chat conversations, for the admins
 // group. Everything comes from the employee API's admin routes, which check
 // the group themselves; this page only decides what to show.
 
@@ -94,7 +94,7 @@ export default function AdminPanel() {
   if (status === 'unconfigured') {
     return (
       <div className="admin-panel">
-        <h1 className="admin-panel__title">Admin</h1>
+        <h1 className="admin-panel__title">AI Stats</h1>
         <p>Sign-in isn’t available right now.</p>
       </div>
     );
@@ -103,7 +103,7 @@ export default function AdminPanel() {
   if (status === 'signedOut') {
     return (
       <div className="admin-panel">
-        <h1 className="admin-panel__title">Admin</h1>
+        <h1 className="admin-panel__title">AI Stats</h1>
         <p>Sign in with your A&amp;E RV Solutions employee account.</p>
         <button className="admin-panel__button" type="button" onClick={() => signIn()}>
           Sign in
@@ -115,8 +115,8 @@ export default function AdminPanel() {
   if (status === 'forbidden') {
     return (
       <div className="admin-panel">
-        <h1 className="admin-panel__title">Admin</h1>
-        <p>This page is for admins.</p>
+        <h1 className="admin-panel__title">AI Stats</h1>
+        <p>AI Stats is for admins.</p>
         <p>
           <a className="admin-panel__link" href="/employees/">
             Back to the Employees page
@@ -129,9 +129,9 @@ export default function AdminPanel() {
   if (status === 'error') {
     return (
       <div className="admin-panel">
-        <h1 className="admin-panel__title">Admin</h1>
+        <h1 className="admin-panel__title">AI Stats</h1>
         <p className="admin-panel__error" role="alert">
-          We couldn’t load the admin data. Please try again shortly.
+          We couldn’t load AI Stats. Please try again shortly.
         </p>
       </div>
     );
@@ -140,7 +140,7 @@ export default function AdminPanel() {
   return (
     <div className="admin-panel">
       <div className="admin-panel__bar">
-        <h1 className="admin-panel__title">Admin</h1>
+        <h1 className="admin-panel__title">AI Stats</h1>
         <div className="admin-panel__range" role="group" aria-label="Date range">
           {RANGES.map((n) => (
             <button

@@ -3,11 +3,11 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 import AdminPanel from '../components/AdminPanel.jsx';
 ---
 
-<!-- A public shell, like /employees/: nothing protected is in this page.
+<!-- AI Stats (admins only). A public shell, like /employees/: nothing protected is in this page.
      Usage and conversations come from the employee API's admin routes,
      which only answer members of the Cognito admins group
      (infrastructure/aws/modules/employees). -->
-<BaseLayout title="Admin | A&E RV Solutions" description="A&E RV Solutions admin." noindex account>
+<BaseLayout title="AI Stats | A&E RV Solutions" description="Eddie's usage and conversations." noindex account>
   <main class="page">
     <AdminPanel client:load />
   </main>

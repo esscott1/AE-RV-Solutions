@@ -1,5 +1,6 @@
-/* Styles for the AdminPanel React island (the /admin/ page). Every class is
-   prefixed .admin-panel__ because an island's CSS is global (CLAUDE.md).
+/* Styles for the AdminPanel React island (the /ai-stats/ page, "AI Stats").
+   Every class is prefixed .admin-panel__ because an island's CSS is global
+   (CLAUDE.md).
    Colours come from the tokens in src/styles/global.css. */
 
 .admin-panel {

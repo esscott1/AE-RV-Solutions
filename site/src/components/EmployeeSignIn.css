@@ -163,8 +163,3 @@
   border-radius: 8px;
 }
 
-.employee-sign-in__link {
-  color: var(--clay-700);
-  font-weight: 600;
-  text-underline-offset: 0.15em;
-}
