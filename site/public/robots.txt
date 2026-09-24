@@ -30,5 +30,7 @@ Disallow: /
 User-agent: Bytespider
 Disallow: /
 
+# The employee sign-in page has nothing public worth indexing.
 User-agent: *
 Allow: /
+Disallow: /employees/

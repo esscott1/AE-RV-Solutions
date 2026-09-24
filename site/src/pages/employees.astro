@@ -1,0 +1,28 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import EmployeeSignIn from '../components/EmployeeSignIn.jsx';
+---
+
+<!-- A public shell: nothing protected is in this page. Everything an
+     employee sees after signing in comes from the employee API, which only
+     answers requests carrying a valid Cognito token
+     (infrastructure/aws/modules/employees). -->
+<BaseLayout
+  title="Employees | A&E RV Solutions"
+  description="Employee sign-in for A&E RV Solutions."
+  noindex
+>
+  <main class="page">
+    <EmployeeSignIn client:load />
+  </main>
+</BaseLayout>
+
+<style>
+  .page {
+    width: var(--content-width);
+    max-width: var(--measure);
+    min-height: 70vh;
+    margin-inline: auto;
+    padding: 6rem 0 4rem;
+  }
+</style>

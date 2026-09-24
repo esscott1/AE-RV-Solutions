@@ -1,0 +1,33 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout
+  title="Customer Testimonials | A&E RV Solutions"
+  description="What A&E RV Solutions customers say about their off-grid power and RV systems."
+>
+  <main class="page">
+    <h1 class="page__title">Customer Testimonials</h1>
+    <p class="page__lead">Stories from our customers are coming soon.</p>
+  </main>
+</BaseLayout>
+
+<style>
+  .page {
+    width: var(--content-width);
+    max-width: var(--measure);
+    min-height: 70vh;
+    margin-inline: auto;
+    padding: 6rem 0 4rem;
+  }
+
+  .page__title {
+    font-size: clamp(2rem, 5vw, 2.75rem);
+    font-weight: 500;
+  }
+
+  .page__lead {
+    margin: 1rem 0 0;
+    color: var(--pine-900);
+  }
+</style>
