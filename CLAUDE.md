@@ -45,7 +45,8 @@ Domain: aervsolutions.com (registered with GoDaddy, DNS pointing to AWS Amplify)
 - Module structure: amplify/, chatbot/, and employees/ today; contact/,
   library/, telegram/ as those features get built
 - Tags: every taggable resource gets `Customer = "AERVSolutions"`, passed
-  to each module as `tags` from live/prod
+  to each module as `tags` from live/prod (bootstrap sets it with provider
+  `default_tags`)
 - State backend: S3 with native lockfile (`use_lockfile = true`, Terraform
   >= 1.10). The DynamoDB lock table still exists from bootstrap but is no
   longer used.
