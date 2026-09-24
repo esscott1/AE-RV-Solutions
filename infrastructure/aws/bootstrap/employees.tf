@@ -28,6 +28,7 @@ locals {
     "cognito-idp:DescribeUserPool",
     "cognito-idp:GetUserPoolMfaConfig",
     "cognito-idp:DescribeUserPoolClient",
+    "cognito-idp:ListUserPoolClients",
     "cognito-idp:GetGroup",
     "cognito-idp:DescribeManagedLoginBranding",
     "cognito-idp:DescribeManagedLoginBrandingByClient",
