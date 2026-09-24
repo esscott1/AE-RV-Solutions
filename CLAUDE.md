@@ -30,6 +30,11 @@ Domain: aervsolutions.com (registered with GoDaddy, DNS pointing to AWS Amplify)
   mirrors the folder into the private `ae-rv-chatbot-kb-docs-*` bucket
   (`--delete`) and re-indexes it. Templates live outside that folder
   (`modules/chatbot/kb-templates/`) so they're never indexed
+- Employee sign-in: Cognito user pool (Essentials, passwords + passkeys,
+  admin-created accounts only) → HTTP API with a JWT authorizer → Lambda
+  (`modules/employees/`). Protected content comes only from that API, never
+  from the site build. Employee emails never go in the repo; they're added
+  with the runbook in infrastructure/README.md → Employees
 - Telegram: Lambda webhook pushes chat notifications to owner's cell
 - Vector store: S3 Vectors (NOT OpenSearch Serverless)
 - Inference model: Claude Haiku 4.5 on Bedrock
@@ -37,8 +42,11 @@ Domain: aervsolutions.com (registered with GoDaddy, DNS pointing to AWS Amplify)
 ## Infrastructure as code
 - Tool: Terraform
 - Location: `infrastructure/aws/` (bootstrap/, modules/, live/prod/)
-- Module structure: amplify/ and chatbot/ today; contact/, library/,
-  telegram/ as those features get built
+- Module structure: amplify/, chatbot/, and employees/ today; contact/,
+  library/, telegram/ as those features get built
+- Tags: every taggable resource gets `Customer = "AERVSolutions"`, passed
+  to each module as `tags` from live/prod (bootstrap sets it with provider
+  `default_tags`)
 - State backend: S3 with native lockfile (`use_lockfile = true`, Terraform
   >= 1.10). The DynamoDB lock table still exists from bootstrap but is no
   longer used.

@@ -32,6 +32,10 @@ module "amplify" {
   github_access_token = var.github_access_token
   domain_name         = var.domain_name
 
+  tags = {
+    Customer = "AERVSolutions"
+  }
+
   # Build-time settings for the site's chat widget. Astro only exposes
   # PUBLIC_-prefixed variables to browser code. Both values are public by
   # design (the key only applies the usage plan), so they appear in plan
@@ -40,6 +44,13 @@ module "amplify" {
   environment_variables = {
     PUBLIC_CHAT_API_URL = module.chatbot.chat_api_url
     PUBLIC_CHAT_API_KEY = module.chatbot.chat_api_key
+
+    # Employee sign-in. Public identifiers, not secrets: the pages only
+    # work for accounts an admin created in the user pool.
+    PUBLIC_COGNITO_AUTHORITY = module.employees.issuer
+    PUBLIC_COGNITO_DOMAIN    = module.employees.login_domain
+    PUBLIC_COGNITO_CLIENT_ID = module.employees.client_id
+    PUBLIC_EMPLOYEE_API_URL  = module.employees.api_url
   }
 
   # Amplify writes the validation and routing records into the zone, so the
@@ -54,6 +65,17 @@ module "amplify" {
 # topic live in bootstrap/chatbot.tf.
 module "chatbot" {
   source = "../../modules/chatbot"
+
+  tags = {
+    Customer = "AERVSolutions"
+  }
+}
+
+# Employee sign-in (Cognito, passwords + passkeys) and the protected employee
+# API. Its CI permissions live in bootstrap/employees.tf. Employees are added
+# and removed with the runbook in infrastructure/README.md, never here.
+module "employees" {
+  source = "../../modules/employees"
 
   tags = {
     Customer = "AERVSolutions"

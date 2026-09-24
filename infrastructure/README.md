@@ -213,6 +213,7 @@ HTTPS scanning.
   Route 53 access on `*`, and adding `default_tags`.
 - Static analysis (tflint/checkov).
 - Per-visitor rate limiting for the chatbot (AWS WAF). See [Chatbot](#chatbot).
+- MFA that's enforced by Cognito for employees. See [Employees](#employees).
 
 ## Chatbot
 
@@ -449,6 +450,86 @@ versions** in the S3 console).
   ingestion jobs.
 - **The knowledge base's role** can only read the bucket, call Titan, and use
   its own index.
+
+## Employees
+
+A signed-in area for A&E's 3–4 employees (`modules/employees/`). The site's
+`/employees/` page is a public shell. Everything behind it comes from an API
+that only answers requests carrying a valid token from the employee user
+pool, so nothing protected is in the site build.
+
+```
+Browser ─► /employees/ (public shell)
+  └ "Sign in" ─► ae-rv-employees.auth.us-west-2.amazoncognito.com (Cognito managed login)
+       └ back with tokens (authorization code + PKCE)
+  └ GET <employees_api_url>/me   Authorization: Bearer <ID token>
+       HTTP API ─ JWT authorizer (checks signature, issuer, audience, expiry) ─► Lambda ae-rv-employees-me
+```
+
+| Piece | Setting |
+|---|---|
+| User pool `ae-rv-employees` | Essentials tier (free up to 10,000 monthly users). Admin-created accounts only, no sign-up. Deletion protection + `prevent_destroy` |
+| Sign-in | A password (14+ characters) or a **passkey** (fingerprint, face, or PIN, with user verification required) |
+| MFA | Authenticator app (TOTP), **optional in Cognito but required by this runbook**. A passkey can't count as MFA until the AWS provider supports `FactorConfiguration`; then MFA becomes `ON` |
+| Email | Cognito's built-in email (50 a day): invites and password resets only. There's no SES, because only email sign-in codes would need it |
+| Tokens | ID and access tokens last 60 minutes, and the refresh token 12 hours |
+| `admins` group | For the Admin page (Phase 2). Its members see `"isAdmin": true` from `/me` |
+| API | `GET /me` only. Throttled to 2 requests a second (burst 5). CORS allows only aervsolutions.com, www, and localhost:4321 |
+
+Employee email addresses live only in the user pool, never in this public
+repo or in Terraform.
+
+### Runbook
+
+Set these first (from `terraform -chdir=infrastructure/aws/live/prod output`):
+
+```bash
+POOL=$(terraform -chdir=infrastructure/aws/live/prod output -raw employees_user_pool_id)
+EMAIL=employee@example.com
+```
+
+- **Add an employee.** Cognito emails them an invite with a temporary
+  password (valid 7 days):
+  ```bash
+  aws cognito-idp admin-create-user --user-pool-id "$POOL" --username "$EMAIL" \
+    --user-attributes Name=email,Value="$EMAIL" Name=email_verified,Value=true \
+    --desired-delivery-mediums EMAIL
+  ```
+- **Their first sign-in** (at aervsolutions.com/employees/ → Sign in):
+  1. Email + temporary password, then choose a new password.
+  2. Set up an authenticator app (scan the QR code). This is required, even
+     though Cognito would let them skip it.
+  3. Back on the Employees page, **Add a passkey**. From then on, they sign
+     in with the passkey.
+- **Make someone an admin:** `aws cognito-idp admin-add-user-to-group --user-pool-id "$POOL" --username "$EMAIL" --group-name admins`
+  (they get it on their next sign-in).
+- **Check an employee's MFA:** `aws cognito-idp admin-get-user --user-pool-id "$POOL" --username "$EMAIL"`.
+  `UserMFASettingList` should include `SOFTWARE_TOKEN_MFA`.
+- **Lost phone or passkey:** `aws cognito-idp admin-reset-user-password --user-pool-id "$POOL" --username "$EMAIL"`
+  (they get a reset code by email). To also clear the authenticator app:
+  `aws cognito-idp admin-set-user-mfa-preference --user-pool-id "$POOL" --username "$EMAIL" --software-token-mfa-settings Enabled=false,PreferredMfa=false`,
+  then they set it up again on next sign-in.
+- **Remove an employee.** Sign them out everywhere, then delete them:
+  ```bash
+  aws cognito-idp admin-user-global-sign-out --user-pool-id "$POOL" --username "$EMAIL"
+  aws cognito-idp admin-delete-user --user-pool-id "$POOL" --username "$EMAIL"
+  ```
+  An already-issued ID token keeps working until it expires (up to 60
+  minutes).
+
+### Local development
+
+Put the `employees_*` outputs into `site/.env` as `PUBLIC_COGNITO_AUTHORITY`,
+`PUBLIC_COGNITO_DOMAIN`, `PUBLIC_COGNITO_CLIENT_ID`, and
+`PUBLIC_EMPLOYEE_API_URL`. `http://localhost:4321/employees/` is an allowed
+callback, so sign-in works against the real pool.
+
+### Not yet covered
+
+- MFA `ON` with passkeys counting as MFA (waiting on the AWS provider).
+- A custom login domain. Pin the passkey relying party ID to the prefix
+  domain first, or every passkey stops working.
+- API access logs (the Lambda logs each call, by user ID).
 
 ## Deploying to AWS
 
