@@ -11,6 +11,11 @@ terraform {
       source  = "hashicorp/archive"
       version = "~> 2.7"
     }
+    # Runs the AWS CLI for modules/employees' MFA drift check.
+    external = {
+      source  = "hashicorp/external"
+      version = "~> 2.3"
+    }
   }
 
   backend "s3" {}

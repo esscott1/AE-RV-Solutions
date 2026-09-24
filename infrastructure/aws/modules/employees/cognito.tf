@@ -147,6 +147,37 @@ resource "terraform_data" "mfa_config" {
   }
 }
 
+# Drift check for the MFA configuration above. Terraform can't read those
+# settings back through the provider, so every plan and apply reads them with
+# the AWS CLI and compares them with local.mfa. A mismatch (e.g. a change made
+# in the console) shows as a warning in the plan and the PR's plan comment.
+# It never blocks a plan: check blocks only warn. To fix a mismatch, re-run
+# terraform_data.mfa_config:
+#   terraform apply -replace=module.employees.terraform_data.mfa_config
+check "mfa_config_matches" {
+  data "external" "mfa_config" {
+    program = [
+      "aws", "cognito-idp", "get-user-pool-mfa-config",
+      "--region", local.region,
+      "--user-pool-id", aws_cognito_user_pool.employees.id,
+      "--output", "json",
+      "--query", "{configuration: MfaConfiguration, totp_enabled: to_string(SoftwareTokenMfaConfiguration.Enabled), user_verification: WebAuthnConfiguration.UserVerification, passkey_factor: WebAuthnConfiguration.FactorConfiguration}",
+    ]
+  }
+
+  assert {
+    # tomap: the result is a map(string), and == also compares types, so an
+    # object literal would never be equal to it.
+    condition = data.external.mfa_config.result == tomap({
+      configuration     = local.mfa.configuration
+      totp_enabled      = tostring(local.mfa.totp_enabled)
+      user_verification = local.mfa.user_verification
+      passkey_factor    = local.mfa.passkey_factor
+    })
+    error_message = "The employee user pool's live MFA configuration (${jsonencode(data.external.mfa_config.result)}) doesn't match local.mfa in modules/employees/cognito.tf. Someone changed it outside Terraform. Re-apply it with: terraform apply -replace=module.employees.terraform_data.mfa_config"
+  }
+}
+
 resource "aws_cognito_user_group" "admins" {
   name         = "admins"
   user_pool_id = aws_cognito_user_pool.employees.id
