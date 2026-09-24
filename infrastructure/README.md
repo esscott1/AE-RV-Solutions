@@ -470,7 +470,7 @@ Browser ─► /employees/ (public shell)
 |---|---|
 | User pool `ae-rv-employees` | Essentials tier (free up to 10,000 monthly users). Admin-created accounts only, no sign-up. Deletion protection + `prevent_destroy` |
 | Sign-in | A password (14+ characters) or a **passkey** (fingerprint, face, or PIN, with user verification required) |
-| MFA | Authenticator app (TOTP), **optional in Cognito but required by this runbook**. A passkey can't count as MFA until the AWS provider supports `FactorConfiguration`; then MFA becomes `ON` |
+| MFA | **Required** (`ON`). A password sign-in needs an authenticator-app (TOTP) code. A passkey with user verification counts as both factors (`FactorConfiguration = MULTI_FACTOR_WITH_USER_VERIFICATION`). The AWS provider can't set that yet, so `terraform_data.passkey_counts_as_mfa` sets it with the AWS CLI during apply. Without it, Cognito hides the passkey option from anyone who has MFA. Check it with `aws cognito-idp get-user-pool-mfa-config --user-pool-id "$POOL"` |
 | Email | Cognito's built-in email (50 a day): invites and password resets only. There's no SES, because only email sign-in codes would need it |
 | Tokens | ID and access tokens last 60 minutes, and the refresh token 12 hours |
 | `admins` group | For the Admin page (Phase 2). Its members see `"isAdmin": true` from `/me` |
@@ -497,10 +497,10 @@ EMAIL=employee@example.com
   ```
 - **Their first sign-in** (at aervsolutions.com/employees/ → Sign in):
   1. Email + temporary password, then choose a new password.
-  2. Set up an authenticator app (scan the QR code). This is required, even
-     though Cognito would let them skip it.
+  2. Cognito makes them set up an authenticator app (scan the QR code) before
+     finishing. MFA is required.
   3. Back on the Employees page, **Add a passkey**. From then on, they sign
-     in with the passkey.
+     in with the passkey: enter their email, then choose the passkey option.
 - **Make someone an admin:** `aws cognito-idp admin-add-user-to-group --user-pool-id "$POOL" --username "$EMAIL" --group-name admins`
   (they get it on their next sign-in).
 - **Check an employee's MFA:** `aws cognito-idp admin-get-user --user-pool-id "$POOL" --username "$EMAIL"`.
@@ -508,7 +508,7 @@ EMAIL=employee@example.com
 - **Lost phone or passkey:** `aws cognito-idp admin-reset-user-password --user-pool-id "$POOL" --username "$EMAIL"`
   (they get a reset code by email). To also clear the authenticator app:
   `aws cognito-idp admin-set-user-mfa-preference --user-pool-id "$POOL" --username "$EMAIL" --software-token-mfa-settings Enabled=false,PreferredMfa=false`,
-  then they set it up again on next sign-in.
+  then Cognito makes them set it up again on their next sign-in.
 - **Remove an employee.** Sign them out everywhere, then delete them:
   ```bash
   aws cognito-idp admin-user-global-sign-out --user-pool-id "$POOL" --username "$EMAIL"
@@ -526,7 +526,8 @@ callback, so sign-in works against the real pool.
 
 ### Not yet covered
 
-- MFA `ON` with passkeys counting as MFA (waiting on the AWS provider).
+- A native provider argument for `FactorConfiguration`. Replace
+  `terraform_data.passkey_counts_as_mfa` when the AWS provider adds one.
 - A custom login domain. Pin the passkey relying party ID to the prefix
   domain first, or every passkey stops working.
 - API access logs (the Lambda logs each call, by user ID).

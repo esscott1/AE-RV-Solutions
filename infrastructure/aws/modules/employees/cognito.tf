@@ -13,16 +13,17 @@ locals {
 #
 # Sign-in is a password or a passkey. Email sign-in codes would need SES, and
 # Cognito's built-in email (50 a day) is plenty for invites and password
-# resets. A passkey can't count as MFA until the AWS provider exposes
-# FactorConfiguration, so MFA is OPTIONAL and the runbook has every employee
-# enroll an authenticator app. Change to "ON" once the provider supports it.
+# resets. MFA is required: a password sign-in also needs an authenticator-app
+# code, and a passkey (with user verification) counts as both factors. That
+# last part is set by terraform_data.passkey_counts_as_mfa below, because the
+# AWS provider can't set it yet.
 resource "aws_cognito_user_pool" "employees" {
   name                     = var.name_prefix
   user_pool_tier           = "ESSENTIALS"
   username_attributes      = ["email"]
   auto_verified_attributes = ["email"]
   deletion_protection      = "ACTIVE"
-  mfa_configuration        = "OPTIONAL"
+  mfa_configuration        = "ON"
 
   username_configuration {
     case_sensitive = false
@@ -89,6 +90,41 @@ resource "aws_cognito_user_pool" "employees" {
   }
 }
 
+# Passkeys count as MFA (FactorConfiguration = MULTI_FACTOR_WITH_USER_VERIFICATION).
+#
+# AWS provider 6.66 has no argument for this, and Cognito defaults to
+# SINGLE_FACTOR, which hides the passkey option from anyone with MFA set up
+# (with MFA ON, that's everyone). So the apply sets it with the AWS CLI.
+#
+# Whenever the pool's MFA or passkey settings change, the provider rewrites
+# this configuration without the field, resetting it to SINGLE_FACTOR. The
+# triggers below are exactly those settings, so this reruns right after.
+# The CLI is called directly (no shell), so it runs the same in CI and on
+# Windows. Local applies need AWS_PROFILE set for the CLI.
+#
+# Check it: aws cognito-idp get-user-pool-mfa-config --user-pool-id <id>
+# Replace this with the provider argument once it exists.
+resource "terraform_data" "passkey_counts_as_mfa" {
+  triggers_replace = {
+    user_pool_id = aws_cognito_user_pool.employees.id
+    mfa          = aws_cognito_user_pool.employees.mfa_configuration
+    web_authn    = jsonencode(aws_cognito_user_pool.employees.web_authn_configuration)
+    totp         = jsonencode(aws_cognito_user_pool.employees.software_token_mfa_configuration)
+  }
+
+  provisioner "local-exec" {
+    interpreter = [
+      "aws", "cognito-idp", "set-user-pool-mfa-config",
+      "--region", local.region,
+      "--user-pool-id", aws_cognito_user_pool.employees.id,
+      "--mfa-configuration", aws_cognito_user_pool.employees.mfa_configuration,
+      "--software-token-mfa-configuration", "Enabled=true",
+      "--web-authn-configuration",
+    ]
+    command = "UserVerification=required,FactorConfiguration=MULTI_FACTOR_WITH_USER_VERIFICATION"
+  }
+}
+
 resource "aws_cognito_user_group" "admins" {
   name         = "admins"
   user_pool_id = aws_cognito_user_pool.employees.id
@@ -109,8 +145,8 @@ resource "aws_cognito_user_pool_domain" "employees" {
 #
 # aws.cognito.signin.user.admin lets a signed-in employee's access token call
 # Cognito's self-service APIs for their own account only (e.g.
-# AssociateSoftwareToken to set up an authenticator app, since MFA is
-# OPTIONAL and managed login doesn't prompt for it). It grants nothing over
+# AssociateSoftwareToken to set up an authenticator app from the Employees
+# page). It grants nothing over
 # other users; admin actions still need IAM.
 resource "aws_cognito_user_pool_client" "site" {
   name         = "${var.name_prefix}-site"
