@@ -82,6 +82,11 @@ module "employees" {
   usage_plan_id      = module.chatbot.usage_plan_id
   api_key_id         = module.chatbot.api_key_id
 
+  # The knowledge API (Add Knowledge, KBValidation, KBViewer).
+  kb_docs_bucket    = module.chatbot.kb_docs_bucket
+  knowledge_base_id = module.chatbot.knowledge_base_id
+  kb_data_source_id = module.chatbot.kb_data_source_id
+
   tags = {
     Customer = "AERVSolutions"
   }

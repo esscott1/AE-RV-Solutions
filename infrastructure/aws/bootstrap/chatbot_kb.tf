@@ -37,6 +37,7 @@ data "aws_iam_policy_document" "github_actions_terraform_chatbot_kb" {
       "s3:PutBucketPublicAccessBlock",
       "s3:PutBucketOwnershipControls",
       "s3:PutBucketTagging",
+      "s3:PutLifecycleConfiguration",
     ]
     resources = [local.kb_docs_bucket_arn]
   }

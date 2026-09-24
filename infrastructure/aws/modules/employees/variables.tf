@@ -64,3 +64,18 @@ variable "price_per_mtok_output" {
   type        = number
   default     = 5.50
 }
+
+variable "kb_docs_bucket" {
+  description = "The knowledge base's documents bucket (modules/chatbot). The knowledge API keeps pending/, rejected/ and approved/ entries there."
+  type        = string
+}
+
+variable "knowledge_base_id" {
+  description = "Eddie's Bedrock knowledge base (modules/chatbot)."
+  type        = string
+}
+
+variable "kb_data_source_id" {
+  description = "The knowledge base's S3 data source (modules/chatbot), re-indexed after approvals and removals."
+  type        = string
+}

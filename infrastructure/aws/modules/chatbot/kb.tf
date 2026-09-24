@@ -63,6 +63,44 @@ resource "aws_s3_bucket_versioning" "kb_docs" {
   }
 }
 
+# The knowledge admin API (modules/employees, kb.py) keeps submissions here
+# too: pending/ (awaiting review), rejected/ and approved/ (the only prefix
+# the data source indexes). Rejections expire after 30 days; earlier versions
+# of anything (edits, removals) after a year.
+resource "aws_s3_bucket_lifecycle_configuration" "kb_docs" {
+  bucket = aws_s3_bucket.kb_docs.id
+
+  rule {
+    id     = "expire-rejected"
+    status = "Enabled"
+
+    filter {
+      prefix = "rejected/"
+    }
+
+    expiration {
+      days = 30
+    }
+  }
+
+  rule {
+    id     = "expire-old-versions"
+    status = "Enabled"
+
+    filter {}
+
+    noncurrent_version_expiration {
+      noncurrent_days = 365
+    }
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 1
+    }
+  }
+
+  depends_on = [aws_s3_bucket_versioning.kb_docs]
+}
+
 # --- Vector store (S3 Vectors) -----------------------------------------------
 
 # Derived data: a sync rebuilds it entirely from the documents bucket, so it
@@ -190,8 +228,11 @@ resource "aws_bedrockagent_data_source" "kb_docs" {
 
   data_source_configuration {
     type = "S3"
+    # Only admin-approved knowledge is indexed. Drafts (pending/) and
+    # rejections (rejected/) share the bucket but are never read.
     s3_configuration {
-      bucket_arn = aws_s3_bucket.kb_docs.arn
+      bucket_arn         = aws_s3_bucket.kb_docs.arn
+      inclusion_prefixes = ["approved/"]
     }
   }
 
