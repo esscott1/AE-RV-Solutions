@@ -2,6 +2,7 @@
 import '../styles/global.css';
 import ChatWidget from '../components/ChatWidget.jsx';
 import SiteNav from '../components/SiteNav.astro';
+import AccountMenu from '../components/AccountMenu.jsx';
 import Footer from '../components/Footer.astro';
 
 interface Props {
@@ -9,12 +10,16 @@ interface Props {
   description?: string;
   // Keeps a page out of search results (e.g. the employee sign-in page).
   noindex?: boolean;
+  // Shows the signed-in employee's account menu (top right), for pages
+  // behind sign-in.
+  account?: boolean;
 }
 
 const {
   title,
   description = 'A&E RV Solutions — off-grid power, connectivity, and self-sufficient systems for your travel trailer.',
   noindex = false,
+  account = false,
 } = Astro.props;
 ---
 
@@ -29,7 +34,13 @@ const {
     <title>{title}</title>
   </head>
   <body>
-    <SiteNav />
+    <!-- Top bar: menu on the left, the account menu (signed-in pages) on the
+         right, like the AWS console. It scrolls with the page and sits below
+         the chat window in the stacking order. -->
+    <header class="site-header">
+      <SiteNav />
+      {account && <AccountMenu client:load />}
+    </header>
     <slot />
     <Footer />
     <!-- Loads React only once the browser is idle, so it never delays first
@@ -38,3 +49,24 @@ const {
     <ChatWidget client:idle />
   </body>
 </html>
+
+<style>
+  .site-header {
+    position: absolute;
+    top: 1rem;
+    left: 1rem;
+    right: 1rem;
+    z-index: 40;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    /* The bar spans the page, but only its buttons take clicks: the hero
+       photo underneath stays clickable. */
+    pointer-events: none;
+  }
+
+  .site-header > :global(*) {
+    pointer-events: auto;
+  }
+</style>

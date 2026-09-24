@@ -63,6 +63,31 @@ export async function currentUser() {
   }
 }
 
+// The signed-in user if their tokens are still valid, without renewing
+// them. For display only (the account menu); pages that call the API use
+// currentUser().
+export async function signedInUser() {
+  if (!signInConfigured) return null;
+  const user = await userManager().getUser();
+  return user && !user.expired ? user : null;
+}
+
+// Calls back with the user whenever sign-in completes or tokens are
+// cleared, so the account menu updates when a page finishes signing in.
+// Returns an unsubscribe function.
+export function onUserChange(callback) {
+  if (!signInConfigured) return () => {};
+  const { events } = userManager();
+  const loaded = (user) => callback(user);
+  const unloaded = () => callback(null);
+  events.addUserLoaded(loaded);
+  events.addUserUnloaded(unloaded);
+  return () => {
+    events.removeUserLoaded(loaded);
+    events.removeUserUnloaded(unloaded);
+  };
+}
+
 export function signIn() {
   return userManager().signinRedirect();
 }

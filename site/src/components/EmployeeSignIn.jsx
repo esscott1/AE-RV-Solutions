@@ -6,7 +6,6 @@ import {
   currentUser,
   signIn,
   signInConfigured,
-  signOut,
 } from '../lib/auth.js';
 import {
   finishAuthenticatorSetup,
@@ -98,18 +97,6 @@ export default function EmployeeSignIn() {
 
   return (
     <div className="employee-sign-in">
-      <div className="employee-sign-in__bar">
-        <p className="employee-sign-in__muted">
-          Signed in as <strong>{me.email}</strong>
-        </p>
-        <button
-          className="employee-sign-in__button employee-sign-in__button--quiet"
-          type="button"
-          onClick={() => signOut()}
-        >
-          Sign out
-        </button>
-      </div>
       <h1 className="employee-sign-in__title">{me.title}</h1>
       {me.isAdmin && (
         <p>

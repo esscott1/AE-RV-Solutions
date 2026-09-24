@@ -8,7 +8,8 @@
   position: fixed;
   right: 1.25rem;
   bottom: 1.25rem;
-  z-index: 50;
+  /* Above everything else, including the site's top bar and menus. */
+  z-index: 70;
   display: flex;
   flex-direction: column;
   align-items: flex-end;

@@ -72,14 +72,11 @@ const current = trim(Astro.url.pathname);
 </script>
 
 <style>
+  /* Placed by BaseLayout's top bar (top left). */
   .site-nav {
-    position: fixed;
-    top: 1rem;
-    right: 1rem;
-    z-index: 60;
     display: flex;
     flex-direction: column;
-    align-items: flex-end;
+    align-items: flex-start;
     gap: 0.5rem;
     font-family: var(--font-body);
   }
