@@ -134,11 +134,25 @@ passkey). Someone not added by an admin can't sign up or sign in. An admin's `/m
 
 ## Phase 2: Admin page (after Phase 1 is validated)
 
-### PR 3: Chat transcripts + usage data (chatbot Terraform + widget)
-- **`modules/chatbot/transcripts.tf`**: DynamoDB `ae-rv-chatbot-transcripts` (on-demand, TTL 30 days, encrypted, PITR off). Key: `day` (YYYY-MM-DD) + `ts#executionId`, so "last N days" is a cheap Query, not a Scan.
-- **State machine:** a final `Record` task (`dynamodb:putItem` optimized integration) after every reply state: the last customer message, the reply, the route (answer/safety_referral/emergency/decline/unavailable/offline), the source label, and the token counts from the Answer/Classify results. **No IP or identifiers.** Errors are caught, so a failed write never breaks a chat. The Step Functions role gets `dynamodb:PutItem` on that table only.
-- Widget: a one-line notice ("Chats are stored for 30 days to improve our answers. Please don't share personal details.").
-- Rerun the safety eval (the route logic changes around it) and `answers.py`.
+### PR 3: Chat transcripts (Terraform only)
+**Changed 2026-09-24 (owner's decisions):**
+- **S3 instead of DynamoDB.** Both cost under a cent a month at this volume,
+  and S3 is simpler to expire and browse.
+- **The widget notice is deferred** to a larger site deploy.
+
+What PR 3 contains:
+- **`modules/chatbot/transcripts.tf`**: the private bucket
+  `ae-rv-chatbot-transcripts-<account>`, with a lifecycle rule that expires
+  transcripts after 30 days. One JSON file per exchange, at
+  `transcripts/YYYY/MM/DD/`.
+- **State machine:**
+  - a new `Init` state
+  - token counts captured from Classify and Answer
+  - every reply ends in a `Record` state (`aws-sdk:s3:putObject`), whose
+    errors are caught
+  - the Step Functions role gets `s3:PutObject` on `transcripts/*` only
+- **No IP or identifiers** are stored.
+- The safety eval and `answers.py` are rerun.
 
 ### PR 4: Admin page + knowledge entries
 - **`modules/chatbot/kb.tf`**:
@@ -150,7 +164,7 @@ passkey). Someone not added by an admin can't sign up or sign in. An admin's `/m
   - `GET /admin/usage?days=7`:
     - The usage plan's daily counts vs the 50/day quota.
     - `AWS/Bedrock` metrics for tokens + a computed estimated cost ($1.10/$5.50 per 1M tokens, set as variables; no Cost Explorer, which is charged per call).
-    - Route counts and **recent transcripts** from DynamoDB.
+    - Route counts and **recent transcripts** from the transcripts bucket.
   - `GET/POST /admin/entries`: any **employee** can submit a Markdown entry (title + body, size-limited, saved to `pending/<id>.md` with the author email in object metadata).
   - `POST /admin/entries/{id}/approve|reject`: **admins only**. Approve copies the entry to `approved/` and starts an ingestion job on the entries data source. Reject deletes the draft.
   - `DELETE /admin/entries/{id}`: admins only. It removes the approved entry and re-syncs.

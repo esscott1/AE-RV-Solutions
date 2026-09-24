@@ -296,13 +296,42 @@ path if that happens.
   pull out; the daily quota limits the total.
 - Customer messages reach the classifier as quoted data inside
   `<conversation>` tags, not as instructions.
-- No conversation is stored, and Step Functions logs errors only, without
-  execution data.
+- Step Functions logs errors only, without execution data. Conversations
+  are stored only as transcripts (below), in a private bucket CI can't read.
 
 None of this stops a patient, human-paced extractor. It makes bulk
 extraction slow, capped, and noisy. This matters most once v2 adds a
 knowledge base: design it to return short grounded answers, never whole
 documents or raw chunks.
+
+### Chat transcripts
+
+Every exchange is saved as one JSON file in the private bucket
+`ae-rv-chatbot-transcripts-<account>`, at
+`transcripts/YYYY/MM/DD/HHMMSS-<execution>.json` (UTC). The state machine's
+last state, `Record`, writes it, and S3 deletes it after 30 days
+(`transcript_retention_days`).
+
+| Stored | Never stored |
+|---|---|
+| The time and the execution ID | IP addresses, user agents, or any other identifier (the API forwards only the messages) |
+| The route (answer, safety_referral, emergency, decline, unavailable, invalid, offline) and the source label | |
+| The conversation the widget sent (at most 8 messages) and Eddie's reply | |
+| Input and output token counts for the Classify and Answer calls | |
+
+- **Every reply is recorded**, including offline and safety referrals, so
+  usage totals are complete.
+- **Storage can't break a chat.** A failed write is caught, and the reply
+  goes out unchanged.
+- **Least privilege:**
+  - the state machine can only write under `transcripts/`
+  - the CI roles can configure the bucket but can't read transcripts
+- **Browse them** in the S3 console (the `chat_transcripts_bucket` output).
+  A later Admin page will show them and usage totals.
+- **Why S3 rather than DynamoDB:** at the 50-a-day quota, both cost well
+  under a cent a month. Files are simpler to expire, browse, and download.
+- The chat widget doesn't yet tell visitors that chats are stored. That
+  notice ships with a later site update.
 
 ### Changing the prompts or routes
 

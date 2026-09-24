@@ -32,3 +32,8 @@ output "kb_data_source_id" {
   description = "ID of the knowledge base's S3 data source (what a sync re-indexes)."
   value       = aws_bedrockagent_data_source.kb_docs.data_source_id
 }
+
+output "transcripts_bucket" {
+  description = "Private S3 bucket holding chat transcripts (transcripts/YYYY/MM/DD/), deleted after transcript_retention_days."
+  value       = aws_s3_bucket.transcripts.bucket
+}
