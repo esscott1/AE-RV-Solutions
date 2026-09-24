@@ -15,3 +15,8 @@
 # Windows checkout would show every line as changed in a local plan (and a
 # local apply would push CRLF), exactly like the .tf case above.
 infrastructure/aws/modules/*/prompts/*.md  text eol=lf
+
+# Lambda source is zipped by archive_file, and the zip's hash decides whether
+# the function's code is updated. A CRLF checkout on Windows changes the hash,
+# so a local plan would show a code update CI (Linux, LF) never does.
+infrastructure/aws/modules/*/lambda/**  text eol=lf

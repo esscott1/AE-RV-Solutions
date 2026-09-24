@@ -1,9 +1,12 @@
 # --- GET /me Lambda -----------------------------------------------------------
 
+# output_file_mode pins the zip's file permissions, so a plan run on Windows
+# builds the same zip (and hash) as CI on Linux.
 data "archive_file" "me" {
-  type        = "zip"
-  source_file = "${path.module}/lambda/me.py"
-  output_path = "${path.module}/.build/me.zip"
+  type             = "zip"
+  source_file      = "${path.module}/lambda/me.py"
+  output_path      = "${path.module}/.build/me.zip"
+  output_file_mode = "0644"
 }
 
 data "aws_iam_policy_document" "lambda_trust" {
