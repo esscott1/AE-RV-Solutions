@@ -47,6 +47,25 @@ resource "aws_apigatewayv2_route" "me" {
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
 
+# Admin routes. The authorizer only proves the caller is a signed-in
+# employee; the function itself requires the admins group (403 otherwise).
+resource "aws_apigatewayv2_integration" "admin" {
+  api_id                 = aws_apigatewayv2_api.employees.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.admin.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "admin" {
+  for_each = toset(["GET /admin/usage", "GET /admin/conversations"])
+
+  api_id             = aws_apigatewayv2_api.employees.id
+  route_key          = each.key
+  target             = "integrations/${aws_apigatewayv2_integration.admin.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
 # No access logs: HTTP API logging needs account-wide CloudWatch Logs
 # delivery permissions for CI. The Lambda logs each call instead.
 resource "aws_apigatewayv2_stage" "default" {

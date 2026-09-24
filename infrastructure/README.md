@@ -503,7 +503,7 @@ Browser ─► /employees/ (public shell)
 | Email | Cognito's built-in email (50 a day): invites and password resets only. There's no SES, because only email sign-in codes would need it |
 | Tokens | ID and access tokens last 60 minutes, and the refresh token 12 hours |
 | `admins` group | For the Admin page (Phase 2). Its members see `"isAdmin": true` from `/me` |
-| API | `GET /me` only. Throttled to 2 requests a second (burst 5). CORS allows only aervsolutions.com, www, and localhost:4321 |
+| API | `GET /me` (any employee). **Admins only** (the `admins` group, checked by the function, 403 otherwise): `GET /admin/usage?days=N` (requests vs the daily quota, exchanges, conversations, routes, tokens, and estimated Bedrock cost per UTC day) and `GET /admin/conversations?days=N` (transcripts grouped by conversation ID, each with total tokens and cost), N = 1–30. The admin function's role is read-only: list/read `transcripts/` and read the chat usage plan's usage. Costs use `price_per_mtok_input`/`output` (Haiku 4.5: $1.10 / $5.50). Throttled to 2 requests a second (burst 5). CORS allows only aervsolutions.com, www, and localhost:4321 |
 
 Employee email addresses live only in the user pool, never in this public
 repo or in Terraform.
