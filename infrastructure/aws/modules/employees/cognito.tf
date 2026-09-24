@@ -106,6 +106,12 @@ resource "aws_cognito_user_pool_domain" "employees" {
 
 # Public client for the site: no secret (it would ship in the browser bundle),
 # authorization code flow with PKCE.
+#
+# aws.cognito.signin.user.admin lets a signed-in employee's access token call
+# Cognito's self-service APIs for their own account only (e.g.
+# AssociateSoftwareToken to set up an authenticator app, since MFA is
+# OPTIONAL and managed login doesn't prompt for it). It grants nothing over
+# other users; admin actions still need IAM.
 resource "aws_cognito_user_pool_client" "site" {
   name         = "${var.name_prefix}-site"
   user_pool_id = aws_cognito_user_pool.employees.id
@@ -113,7 +119,7 @@ resource "aws_cognito_user_pool_client" "site" {
   generate_secret                      = false
   allowed_oauth_flows_user_pool_client = true
   allowed_oauth_flows                  = ["code"]
-  allowed_oauth_scopes                 = ["openid", "email", "profile"]
+  allowed_oauth_scopes                 = ["openid", "email", "profile", "aws.cognito.signin.user.admin"]
   supported_identity_providers         = ["COGNITO"]
   callback_urls                        = local.callback_urls
   logout_urls                          = local.callback_urls

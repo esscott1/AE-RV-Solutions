@@ -155,6 +155,13 @@ role has a PR-only bypass: a red PR can be force-merged (`gh pr merge --admin`
 or the web "bypass rules" checkbox), but direct pushes stay blocked even for
 admins. Never use `--admin` unless the user explicitly asks for an override.
 
+**Terraform changes and site changes never share a PR.** Anything under
+`infrastructure/` goes in its own PR, separate from `site/` changes, even a
+one-line change a site feature needs. When a feature needs both, the
+infrastructure PR merges (and its apply is verified) first, then the site
+PR. Each deploys through its own workflow, so this keeps review, rollback
+and the approval gates independent.
+
 **Claude never merges or approves a pull request on its own.** Every merge
 needs the user's explicit OK for that specific PR, even when all checks are
 green. Merging deploys to production, since the Terraform apply and the site
