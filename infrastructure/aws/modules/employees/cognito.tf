@@ -67,12 +67,16 @@ resource "aws_cognito_user_pool" "employees" {
     attributes_require_verification_before_update = ["email"]
   }
 
+  # Cognito requires an SMS invite template (at least 6 characters, with
+  # {username} and {####}) even though this pool never sends texts: leaving it
+  # out makes the provider send an empty one, which CreateUserPool rejects.
   admin_create_user_config {
     allow_admin_create_user_only = true
 
     invite_message_template {
       email_subject = "Your A&E RV Solutions employee account"
       email_message = "You've been added to the A&E RV Solutions employee site. Sign in at https://aervsolutions.com/employees/ with your email ({username}) and this temporary password: {####}<br><br>It expires in 7 days. You'll choose your own password, set up an authenticator app, and can then add a passkey."
+      sms_message   = "A&E RV Solutions employee sign-in: username {username}, temporary password {####}"
     }
   }
 
