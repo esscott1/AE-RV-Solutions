@@ -8,10 +8,11 @@ Phase 1 is in progress.
   setting. PR 1 shipped **MFA `OPTIONAL`** as a fallback. The first real
   sign-in showed the fallback fails: with `SINGLE_FACTOR` (Cognito's
   default), a user with an authenticator app is never offered passkey
-  sign-in. The fix (2026-09-24, owner's choice): **MFA `ON`**, with
-  `MULTI_FACTOR_WITH_USER_VERIFICATION` set by the AWS CLI from a
-  `terraform_data` provisioner that reruns whenever the pool's MFA or
-  passkey settings change.
+  sign-in. The fix (2026-09-24, owner's choice): **MFA `ON`** with
+  `MULTI_FACTOR_WITH_USER_VERIFICATION`. The provider can't turn MFA `ON` at
+  all (it omits the field, and Cognito rejects `SINGLE_FACTOR` with MFA `ON`),
+  so `terraform_data.mfa_config` applies the whole MFA configuration with
+  the AWS CLI, and the pool resource ignores those settings.
 - The passkey relying party ID is **not pinned**. The pool is created
   before its domain exists, so pinning would need a second apply. The
   default is the prefix domain. Pin it before adding a custom domain.

@@ -3,6 +3,17 @@ data "aws_region" "current" {}
 locals {
   region        = data.aws_region.current.region
   callback_urls = [for origin in var.site_origins : "${origin}/employees/"]
+
+  # The pool's MFA settings, applied by terraform_data.mfa_config (see there
+  # for why not by the pool resource). Change them here.
+  mfa = {
+    configuration     = "ON"
+    totp_enabled      = true
+    user_verification = "required"
+    # A passkey with user verification counts as both factors. With
+    # SINGLE_FACTOR, Cognito never offers passkey sign-in to a user with MFA.
+    passkey_factor = "MULTI_FACTOR_WITH_USER_VERIFICATION"
+  }
 }
 
 # --- User pool ----------------------------------------------------------------
@@ -14,16 +25,19 @@ locals {
 # Sign-in is a password or a passkey. Email sign-in codes would need SES, and
 # Cognito's built-in email (50 a day) is plenty for invites and password
 # resets. MFA is required: a password sign-in also needs an authenticator-app
-# code, and a passkey (with user verification) counts as both factors. That
-# last part is set by terraform_data.passkey_counts_as_mfa below, because the
-# AWS provider can't set it yet.
+# code, and a passkey (with user verification) counts as both factors. The
+# MFA settings are applied by terraform_data.mfa_config below, not by this
+# resource; see there.
 resource "aws_cognito_user_pool" "employees" {
   name                     = var.name_prefix
   user_pool_tier           = "ESSENTIALS"
   username_attributes      = ["email"]
   auto_verified_attributes = ["email"]
   deletion_protection      = "ACTIVE"
-  mfa_configuration        = "ON"
+  # Create-time values only. After creation, terraform_data.mfa_config owns
+  # these three settings (ignore_changes below). The real values are in
+  # local.mfa.
+  mfa_configuration = "OPTIONAL"
 
   username_configuration {
     case_sensitive = false
@@ -33,8 +47,9 @@ resource "aws_cognito_user_pool" "employees" {
     allowed_first_auth_factors = ["PASSWORD", "WEB_AUTHN"]
   }
 
-  # The relying party ID defaults to the prefix domain. Pin it before adding a
-  # custom domain, or existing passkeys stop working.
+  # The relying party ID defaults to the prefix domain. Pin it (in
+  # terraform_data.mfa_config) before adding a custom domain, or existing
+  # passkeys stop working.
   web_authn_configuration {
     user_verification = "required"
   }
@@ -83,33 +98,40 @@ resource "aws_cognito_user_pool" "employees" {
 
   tags = var.tags
 
-  # Deleting the pool deletes every employee account and passkey. To remove
-  # it deliberately, drop this (and deletion_protection) in its own PR first.
   lifecycle {
+    # Deleting the pool deletes every employee account and passkey. To remove
+    # it deliberately, drop this (and deletion_protection) in its own PR
+    # first.
     prevent_destroy = true
+
+    # Owned by terraform_data.mfa_config. If the provider changed any of
+    # these, it would send the passkey settings without FactorConfiguration,
+    # which Cognito rejects while MFA is ON.
+    ignore_changes = [mfa_configuration, software_token_mfa_configuration, web_authn_configuration]
   }
 }
 
-# Passkeys count as MFA (FactorConfiguration = MULTI_FACTOR_WITH_USER_VERIFICATION).
+# The pool's MFA configuration: MFA ON, authenticator apps, and passkeys that
+# count as both factors (FactorConfiguration).
 #
-# AWS provider 6.66 has no argument for this, and Cognito defaults to
-# SINGLE_FACTOR, which hides the passkey option from anyone with MFA set up
-# (with MFA ON, that's everyone). So the apply sets it with the AWS CLI.
+# Why here and not on the pool resource: AWS provider 6.66 has no argument
+# for FactorConfiguration, and whenever it sets the MFA configuration it
+# omits the field, which Cognito treats as SINGLE_FACTOR. Cognito rejects
+# SINGLE_FACTOR while MFA is ON and passkeys are allowed, so the provider
+# can't set MFA ON at all. Instead, the apply sets the whole configuration
+# with the AWS CLI, from local.mfa, and the pool ignores those settings.
 #
-# Whenever the pool's MFA or passkey settings change, the provider rewrites
-# this configuration without the field, resetting it to SINGLE_FACTOR. The
-# triggers below are exactly those settings, so this reruns right after.
+# It still only changes through a reviewed Terraform apply: it reruns when
+# local.mfa changes or the pool is replaced. Terraform can't read the live
+# values back, so check them with
+#   aws cognito-idp get-user-pool-mfa-config --user-pool-id <id>
 # The CLI is called directly (no shell), so it runs the same in CI and on
-# Windows. Local applies need AWS_PROFILE set for the CLI.
-#
-# Check it: aws cognito-idp get-user-pool-mfa-config --user-pool-id <id>
-# Replace this with the provider argument once it exists.
-resource "terraform_data" "passkey_counts_as_mfa" {
+# Windows; local applies need AWS_PROFILE set. Replace this with the provider
+# argument once it exists (hashicorp/terraform-provider-aws#47598).
+resource "terraform_data" "mfa_config" {
   triggers_replace = {
     user_pool_id = aws_cognito_user_pool.employees.id
-    mfa          = aws_cognito_user_pool.employees.mfa_configuration
-    web_authn    = jsonencode(aws_cognito_user_pool.employees.web_authn_configuration)
-    totp         = jsonencode(aws_cognito_user_pool.employees.software_token_mfa_configuration)
+    mfa          = local.mfa
   }
 
   provisioner "local-exec" {
@@ -117,11 +139,11 @@ resource "terraform_data" "passkey_counts_as_mfa" {
       "aws", "cognito-idp", "set-user-pool-mfa-config",
       "--region", local.region,
       "--user-pool-id", aws_cognito_user_pool.employees.id,
-      "--mfa-configuration", aws_cognito_user_pool.employees.mfa_configuration,
-      "--software-token-mfa-configuration", "Enabled=true",
+      "--mfa-configuration", local.mfa.configuration,
+      "--software-token-mfa-configuration", "Enabled=${local.mfa.totp_enabled}",
       "--web-authn-configuration",
     ]
-    command = "UserVerification=required,FactorConfiguration=MULTI_FACTOR_WITH_USER_VERIFICATION"
+    command = "UserVerification=${local.mfa.user_verification},FactorConfiguration=${local.mfa.passkey_factor}"
   }
 }
 
