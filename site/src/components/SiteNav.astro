@@ -1,0 +1,164 @@
+---
+// Site menu: a hamburger button fixed to the top-right corner that opens a
+// small panel of links. A static component with a few lines of script, not a
+// React island: it only toggles a panel, so it doesn't need React.
+const links = [
+  { href: '/', label: 'Home' },
+  { href: '/testimonials/', label: 'Testimonials' },
+  { href: '/employees/', label: 'Employees' },
+];
+
+// Astro serves pages at /path/ (directory format), so normalize both sides
+// before comparing.
+const trim = (p: string) => p.replace(/\/+$/, '') || '/';
+const current = trim(Astro.url.pathname);
+---
+
+<nav class="site-nav" aria-label="Main">
+  <button
+    class="site-nav__toggle"
+    type="button"
+    aria-expanded="false"
+    aria-controls="site-nav-menu"
+    aria-label="Menu"
+  >
+    <span class="site-nav__bar" aria-hidden="true"></span>
+    <span class="site-nav__bar" aria-hidden="true"></span>
+    <span class="site-nav__bar" aria-hidden="true"></span>
+  </button>
+
+  <ul class="site-nav__menu" id="site-nav-menu" hidden>
+    {links.map(({ href, label }) => (
+      <li>
+        <a
+          class="site-nav__link"
+          href={href}
+          aria-current={trim(href) === current ? 'page' : undefined}
+        >
+          {label}
+        </a>
+      </li>
+    ))}
+  </ul>
+</nav>
+
+<script>
+  const nav = document.querySelector<HTMLElement>('.site-nav');
+  const toggle = nav?.querySelector<HTMLButtonElement>('.site-nav__toggle');
+  const menu = nav?.querySelector<HTMLUListElement>('.site-nav__menu');
+
+  if (nav && toggle && menu) {
+    const setOpen = (open: boolean, returnFocus = false) => {
+      toggle.setAttribute('aria-expanded', String(open));
+      menu.hidden = !open;
+      if (open) menu.querySelector<HTMLAnchorElement>('a')?.focus();
+      else if (returnFocus) toggle.focus();
+    };
+
+    toggle.addEventListener('click', () => {
+      setOpen(toggle.getAttribute('aria-expanded') !== 'true');
+    });
+
+    // Esc closes it and puts focus back on the button.
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && !menu.hidden) setOpen(false, true);
+    });
+
+    // A click anywhere outside the menu closes it.
+    document.addEventListener('click', (event) => {
+      if (!menu.hidden && !nav.contains(event.target as Node)) setOpen(false);
+    });
+  }
+</script>
+
+<style>
+  .site-nav {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    z-index: 60;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.5rem;
+    font-family: var(--font-body);
+  }
+
+  /* 44px minimum tap target. */
+  .site-nav__toggle {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 5px;
+    width: 48px;
+    height: 48px;
+    padding: 0;
+    border: 0;
+    border-radius: 10px;
+    background: var(--pine-950);
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(14, 21, 18, 0.25);
+    transition: background-color 0.15s ease;
+  }
+
+  .site-nav__toggle:hover {
+    background: var(--pine-900);
+  }
+
+  .site-nav__bar {
+    display: block;
+    width: 22px;
+    height: 2px;
+    border-radius: 2px;
+    background: var(--canvas-50);
+    transition: transform 0.2s ease, opacity 0.2s ease;
+  }
+
+  /* The three bars become an X while the menu is open. */
+  .site-nav__toggle[aria-expanded='true'] .site-nav__bar:nth-child(1) {
+    transform: translateY(7px) rotate(45deg);
+  }
+
+  .site-nav__toggle[aria-expanded='true'] .site-nav__bar:nth-child(2) {
+    opacity: 0;
+  }
+
+  .site-nav__toggle[aria-expanded='true'] .site-nav__bar:nth-child(3) {
+    transform: translateY(-7px) rotate(-45deg);
+  }
+
+  .site-nav__menu {
+    min-width: 12rem;
+    margin: 0;
+    padding: 0.4rem;
+    list-style: none;
+    background: var(--canvas-50);
+    border: 1px solid var(--sage-200);
+    border-radius: 12px;
+    box-shadow: 0 12px 32px rgba(14, 21, 18, 0.22);
+  }
+
+  .site-nav__menu[hidden] {
+    display: none;
+  }
+
+  .site-nav__link {
+    display: block;
+    min-height: 44px;
+    padding: 0.65rem 0.9rem;
+    border-radius: 8px;
+    color: var(--pine-950);
+    font-weight: 500;
+    text-decoration: none;
+  }
+
+  .site-nav__link:hover {
+    background: var(--canvas-100);
+  }
+
+  .site-nav__link[aria-current='page'] {
+    color: var(--clay-700);
+    font-weight: 600;
+  }
+</style>

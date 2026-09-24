@@ -1,15 +1,20 @@
 ---
 import '../styles/global.css';
 import ChatWidget from '../components/ChatWidget.jsx';
+import SiteNav from '../components/SiteNav.astro';
+import Footer from '../components/Footer.astro';
 
 interface Props {
   title: string;
   description?: string;
+  // Keeps a page out of search results (e.g. the employee sign-in page).
+  noindex?: boolean;
 }
 
 const {
   title,
   description = 'A&E RV Solutions — off-grid power, connectivity, and self-sufficient systems for your travel trailer.',
+  noindex = false,
 } = Astro.props;
 ---
 
@@ -20,10 +25,13 @@ const {
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="description" content={description} />
+    {noindex && <meta name="robots" content="noindex, nofollow" />}
     <title>{title}</title>
   </head>
   <body>
+    <SiteNav />
     <slot />
+    <Footer />
     <!-- Loads React only once the browser is idle, so it never delays first
          paint. The widget checks whether chat is switched on when it's
          opened, not on page load. -->
