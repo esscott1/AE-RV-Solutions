@@ -53,3 +53,28 @@ output "knowledge_base_id" {
   description = "Bedrock knowledge base ID for the chatbot."
   value       = module.chatbot.knowledge_base_id
 }
+
+output "employees_user_pool_id" {
+  description = "Employee user pool ID, for the add/remove-employee commands (infrastructure/README.md -> Employees)."
+  value       = module.employees.user_pool_id
+}
+
+output "employees_client_id" {
+  description = "The site's public Cognito app client ID. Put it in site/.env as PUBLIC_COGNITO_CLIENT_ID for local development."
+  value       = module.employees.client_id
+}
+
+output "employees_issuer" {
+  description = "Cognito issuer URL. Put it in site/.env as PUBLIC_COGNITO_AUTHORITY."
+  value       = module.employees.issuer
+}
+
+output "employees_login_domain" {
+  description = "Managed sign-in pages host. Put it in site/.env as PUBLIC_COGNITO_DOMAIN."
+  value       = module.employees.login_domain
+}
+
+output "employees_api_url" {
+  description = "Employee API base URL. Put it in site/.env as PUBLIC_EMPLOYEE_API_URL."
+  value       = module.employees.api_url
+}

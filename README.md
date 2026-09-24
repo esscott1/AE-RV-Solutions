@@ -41,6 +41,10 @@ Production is protected before the merge, not after:
   referral, never a model-written procedure. An on/off switch (Actions →
   "Chatbot on/off") stops the chatbot in seconds, and a daily quota caps
   its volume and cost.
+- **Employee sign-in.** The `/employees/` area is served by an API that
+  checks a Cognito token on every request, so nothing protected ships in
+  the public site. Accounts are admin-created only, and employees sign in
+  with a passkey or a password plus an authenticator app.
 - **Least-privilege CI.** No stored AWS keys (GitHub OIDC). PR plans run
   under a read-only role scoped to this site's resources, and secrets are
   kept out of the public CI logs.

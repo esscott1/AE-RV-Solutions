@@ -36,3 +36,6 @@ override.tf.json
 # terraform variable values (may hold personal data, e.g. alert emails)
 *.tfvars
 !*.tfvars.example
+
+# Lambda zips built by archive_file during plan/apply
+infrastructure/aws/modules/*/.build/
