@@ -193,10 +193,10 @@ locals {
         Type = "Pass"
         Assign = {
           messages = "{% $exists($states.input.messages) ? $states.input.messages : [] %}"
-          # The widget's ID; the execution ID when none was sent (so the
-          # exchange is its own conversation); "" when malformed, which
-          # Validate rejects.
-          conversationId = "{% $exists($states.input.conversationId) ? ($type($states.input.conversationId) = 'string' and $contains($states.input.conversationId, /${local.conversation_id_pattern}/) ? $states.input.conversationId : '') : $states.context.Execution.Name %}"
+          # The widget's ID; the execution ID when none was sent, or it's
+          # empty (so the exchange is its own conversation); "" when
+          # malformed, which Validate rejects.
+          conversationId = "{% ($id := $states.input.conversationId; $not($exists($id)) or $id = '' ? $states.context.Execution.Name : ($type($id) = 'string' and $contains($id, /${local.conversation_id_pattern}/) ? $id : '')) %}"
           documents      = ""
           classify_in    = 0
           classify_out   = 0

@@ -146,15 +146,17 @@ resource "aws_api_gateway_integration" "chat_post" {
 
   # Only `messages` (and `conversationId`, when sent) is forwarded. The model
   # has already checked conversationId against a UUID pattern, so it's safe
-  # to embed as-is. escapeJavaScript also escapes single quotes as \', which
-  # isn't valid JSON, so those are undone.
+  # to embed as-is. $input.path gives "" (not null) for a missing field, and
+  # VTL treats "" as true, so the check compares against "" explicitly.
+  # escapeJavaScript also escapes single quotes as \', which isn't valid
+  # JSON, so those are undone.
   request_templates = {
     "application/json" = <<-EOT
       #set($messages = $util.escapeJavaScript($input.json('$.messages')).replaceAll("\\'", "'"))
       #set($cid = $input.path('$.conversationId'))
       {
         "stateMachineArn": "${aws_sfn_state_machine.flow.arn}",
-        "input": "{\"messages\": $messages#if($cid), \"conversationId\": \"$cid\"#end}"
+        "input": "{\"messages\": $messages#if("$!cid" != ""), \"conversationId\": \"$cid\"#end}"
       }
     EOT
   }
