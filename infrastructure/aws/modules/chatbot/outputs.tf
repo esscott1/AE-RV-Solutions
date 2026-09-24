@@ -37,3 +37,13 @@ output "transcripts_bucket" {
   description = "Private S3 bucket holding chat transcripts (transcripts/YYYY/MM/DD/), deleted after transcript_retention_days."
   value       = aws_s3_bucket.transcripts.bucket
 }
+
+output "usage_plan_id" {
+  description = "The chat API's usage plan (daily quota and throttle)."
+  value       = aws_api_gateway_usage_plan.site.id
+}
+
+output "api_key_id" {
+  description = "ID (not the value) of the site's chat API key."
+  value       = aws_api_gateway_api_key.site.id
+}

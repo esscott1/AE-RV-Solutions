@@ -77,6 +77,11 @@ module "chatbot" {
 module "employees" {
   source = "../../modules/employees"
 
+  # The admin API reads the chatbot's transcripts and daily usage.
+  transcripts_bucket = module.chatbot.transcripts_bucket
+  usage_plan_id      = module.chatbot.usage_plan_id
+  api_key_id         = module.chatbot.api_key_id
+
   tags = {
     Customer = "AERVSolutions"
   }

@@ -1,15 +1,13 @@
 """GET /me: who's signed in, and the Employees' Space content.
 
-API Gateway's JWT authorizer has already checked the token's signature,
-issuer, audience and expiry before this runs, so this trusts the claims it
-passes and never validates the token itself. The site sends the ID token,
-which carries the email and group claims (the access token has no email).
-
-Protected content lives here, not in the site build: the public
-/employees/ page shows nothing until this answers.
+The site sends the ID token, which carries the email and group claims (the
+access token has no email). Protected content lives here, not in the site
+build: the public /employees/ page shows nothing until this answers.
 """
 
 import json
+
+from claims import claims_of, parse_groups, respond
 
 CONTENT = {
     "title": "Employees' Space",
@@ -17,26 +15,8 @@ CONTENT = {
 }
 
 
-def parse_groups(value):
-    # HTTP APIs pass array claims as a string, e.g. "[admins]" or
-    # "[admins staff]"; tolerate a real list too.
-    if isinstance(value, list):
-        return [str(g) for g in value]
-    if not value:
-        return []
-    return [g for g in str(value).strip("[]").replace(",", " ").split() if g]
-
-
-def respond(status, body):
-    return {
-        "statusCode": status,
-        "headers": {"Content-Type": "application/json", "Cache-Control": "no-store"},
-        "body": json.dumps(body),
-    }
-
-
 def handler(event, context):
-    claims = event.get("requestContext", {}).get("authorizer", {}).get("jwt", {}).get("claims", {})
+    claims = claims_of(event)
 
     if claims.get("token_use") != "id":
         return respond(401, {"message": "Send the ID token."})

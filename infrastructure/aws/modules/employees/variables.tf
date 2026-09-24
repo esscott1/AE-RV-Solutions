@@ -37,3 +37,30 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "transcripts_bucket" {
+  description = "The chatbot's transcripts bucket (modules/chatbot). The admin API reads it."
+  type        = string
+}
+
+variable "usage_plan_id" {
+  description = "The chat API's usage plan (modules/chatbot). The admin API reads its daily usage."
+  type        = string
+}
+
+variable "api_key_id" {
+  description = "The chat API's site key (modules/chatbot), whose daily usage the admin API reports."
+  type        = string
+}
+
+variable "price_per_mtok_input" {
+  description = "Estimated Bedrock price per million input tokens, for the admin page's cost estimates (Claude Haiku 4.5 through the us inference profile)."
+  type        = number
+  default     = 1.10
+}
+
+variable "price_per_mtok_output" {
+  description = "Estimated Bedrock price per million output tokens, for the admin page's cost estimates."
+  type        = number
+  default     = 5.50
+}
