@@ -1,7 +1,9 @@
 ---
-// Site menu: a hamburger button fixed to the top-right corner that opens a
-// small panel of links. A static component with a few lines of script, not a
-// React island: it only toggles a panel, so it doesn't need React.
+// Site menu: a hamburger button at the far left of BaseLayout's banner that
+// opens a small panel of links: the public pages, plus Employees (sign-in,
+// then the Employees landing page). Pages for signed-in employees are in the
+// account menu on the right. A static component with a few lines of script,
+// not a React island.
 const links = [
   { href: '/', label: 'Home' },
   { href: '/testimonials/', label: 'Testimonials' },
@@ -72,33 +74,28 @@ const current = trim(Astro.url.pathname);
 </script>
 
 <style>
+  /* Far left of BaseLayout's banner. The menu drops down below it. */
   .site-nav {
-    position: fixed;
-    top: 1rem;
-    right: 1rem;
-    z-index: 60;
+    position: relative;
     display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 0.5rem;
+    align-items: center;
     font-family: var(--font-body);
   }
 
-  /* 44px minimum tap target. */
+  /* 40px square: fits the 50px banner with room around it. */
   .site-nav__toggle {
     display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center;
     gap: 5px;
-    width: 48px;
-    height: 48px;
+    width: 40px;
+    height: 40px;
     padding: 0;
     border: 0;
-    border-radius: 10px;
-    background: var(--pine-950);
+    border-radius: 8px;
+    background: transparent;
     cursor: pointer;
-    box-shadow: 0 4px 14px rgba(14, 21, 18, 0.25);
     transition: background-color 0.15s ease;
   }
 
@@ -129,6 +126,9 @@ const current = trim(Astro.url.pathname);
   }
 
   .site-nav__menu {
+    position: absolute;
+    top: calc(100% + 9px);
+    left: 0;
     min-width: 12rem;
     margin: 0;
     padding: 0.4rem;

@@ -22,16 +22,6 @@
   font-weight: 500;
 }
 
-.employee-sign-in__bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem 1rem;
-  padding-bottom: 0.75rem;
-  border-bottom: 1px solid var(--sage-200);
-}
-
 .employee-sign-in__muted {
   color: var(--sage-600);
   font-size: 0.95rem;
@@ -172,3 +162,4 @@
   background: var(--canvas-50);
   border-radius: 8px;
 }
+

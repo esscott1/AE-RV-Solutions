@@ -20,6 +20,13 @@ export const signInConfigured = Boolean(
 // /employees/ is registered on the Cognito app client.
 const pageUrl = () => `${window.location.origin}/employees/`;
 
+// SiteNav and AccountMenu listen for this to update for sign-in. They
+// read the session themselves, so public pages don't load this module.
+export const AUTH_CHANGE_EVENT = 'ae-rv-auth-change';
+function announceAuthChange() {
+  window.dispatchEvent(new Event(AUTH_CHANGE_EVENT));
+}
+
 let manager;
 function userManager() {
   manager ??= new UserManager({
@@ -43,7 +50,9 @@ export async function completeSignIn() {
   const params = new URLSearchParams(window.location.search);
   if (!params.has('state') || !(params.has('code') || params.has('error'))) return null;
   try {
-    return await userManager().signinRedirectCallback();
+    const user = await userManager().signinRedirectCallback();
+    announceAuthChange();
+    return user;
   } finally {
     window.history.replaceState(null, '', pageUrl());
   }
@@ -65,14 +74,6 @@ export async function currentUser() {
 
 export function signIn() {
   return userManager().signinRedirect();
-}
-
-// Clears the tokens here, then Cognito's own session, so the next sign-in
-// asks for credentials again.
-export async function signOut() {
-  await userManager().removeUser();
-  const query = new URLSearchParams({ client_id: CLIENT_ID, logout_uri: pageUrl() });
-  window.location.assign(`https://${DOMAIN}/logout?${query}`);
 }
 
 // Cognito's managed page for registering a passkey. It uses the sign-in

@@ -31,19 +31,20 @@ export async function getChatStatus() {
   }
 }
 
-// Sends the conversation and returns {route, reply, source}. It never
+// Sends the conversation (plus the widget's random conversation ID, when it
+// has one) and returns {route, reply, source}. It never
 // throws. `source` comes only with answers: "knowledge_base", "both", or
 // "general" (see modules/chatbot); otherwise it's undefined. The API answers
 // errors (400 invalid, 429 busy, 502 unavailable) in the same {route, reply}
 // shape, so those are passed through. Anything else becomes a generic
 // "unavailable" reply.
-export async function sendChatMessage(messages) {
+export async function sendChatMessage(messages, conversationId) {
   if (!chatConfigured) return UNAVAILABLE;
   try {
     const res = await fetch(`${CHAT_API_URL}/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': CHAT_API_KEY },
-      body: JSON.stringify({ messages }),
+      body: JSON.stringify(conversationId ? { messages, conversationId } : { messages }),
     });
     const body = await res.json().catch(() => null);
     if (body && typeof body.route === 'string' && typeof body.reply === 'string') {
@@ -159,4 +160,33 @@ export async function finishAuthenticatorSetup(accessToken, code) {
     AccessToken: accessToken,
     SoftwareTokenMfaSettings: { Enabled: true, PreferredMfa: true },
   });
+}
+
+// Admin API (same employee API, admins only). Returns {status: 'ok', data},
+// {status: 'forbidden'} (signed in but not an admin), {status:
+// 'unauthorized'} (sign in again), or {status: 'error'}. Fails closed.
+async function getAdmin(path, idToken) {
+  if (!EMPLOYEE_API_URL || !idToken) return { status: 'unauthorized' };
+  try {
+    const res = await fetch(new URL(path, EMPLOYEE_API_URL), {
+      headers: { Authorization: `Bearer ${idToken}` },
+    });
+    if (res.status === 401) return { status: 'unauthorized' };
+    if (res.status === 403) return { status: 'forbidden' };
+    if (!res.ok) return { status: 'error' };
+    return { status: 'ok', data: await res.json() };
+  } catch {
+    return { status: 'error' };
+  }
+}
+
+// Eddie's usage for the last `days` days (1-30, UTC days, counting today).
+export function getAdminUsage(idToken, days) {
+  return getAdmin(`admin/usage?days=${days}`, idToken);
+}
+
+// Chat transcripts grouped by conversation, newest first, with per-
+// conversation tokens and estimated cost.
+export function getAdminConversations(idToken, days) {
+  return getAdmin(`admin/conversations?days=${days}`, idToken);
 }

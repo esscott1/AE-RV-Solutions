@@ -2,6 +2,7 @@
 import '../styles/global.css';
 import ChatWidget from '../components/ChatWidget.jsx';
 import SiteNav from '../components/SiteNav.astro';
+import AccountMenu from '../components/AccountMenu.astro';
 import Footer from '../components/Footer.astro';
 
 interface Props {
@@ -29,7 +30,14 @@ const {
     <title>{title}</title>
   </head>
   <body>
-    <SiteNav />
+    <!-- Navigation banner above the page: the site menu (public pages +
+         Employees) on the left and, while an employee is signed in, their
+         account menu (employee pages + Sign out) on the right, like the AWS
+         console. It sits below the chat window in the stacking order. -->
+    <header class="site-header">
+      <SiteNav />
+      <AccountMenu />
+    </header>
     <slot />
     <Footer />
     <!-- Loads React only once the browser is idle, so it never delays first
@@ -38,3 +46,18 @@ const {
     <ChatWidget client:idle />
   </body>
 </html>
+
+<style>
+  .site-header {
+    position: relative;
+    z-index: 40;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    height: 50px;
+    padding: 0 0.75rem;
+    background: var(--pine-950);
+    color: var(--canvas-50);
+  }
+</style>

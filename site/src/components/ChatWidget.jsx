@@ -10,9 +10,15 @@ const MAX_ASSISTANT_CHARS = 2500;
 const COUNTER_FROM = 400;
 
 const STORAGE_KEY = 'ae-rv-chat';
+const CONVERSATION_ID_KEY = 'ae-rv-chat-id';
 const OFFLINE_TEXT = 'Chat is offline right now. Please contact us directly.';
 const NOTICE_TEXT =
-  "AI assistant. For electrical or battery hazards, contact a technician. Please don't share personal information. Automated or bulk access is not permitted.";
+  'AI assistant. For electrical or battery hazards, contact a technician. Automated or bulk access is not permitted.';
+// Shown small under the message box. Chats are saved as transcripts
+// (modules/chatbot/transcripts.tf); "train Eddie" means improving his answers
+// and knowledge from real questions, not training an AI model.
+const PRIVACY_TEXT =
+  "Chats are saved for 30 days to help train Eddie. We never save your name, IP address, or location, so please don't type personal details.";
 const SAFETY_ROUTES = new Set(['safety_referral', 'emergency']);
 
 // Shown under answers so visitors know where each one came from. Eddie
@@ -41,6 +47,32 @@ function loadConversation() {
     return Array.isArray(saved) ? saved : [];
   } catch {
     return [];
+  }
+}
+
+// A random ID per conversation, so saved transcripts can be grouped. It
+// lives only in this tab's sessionStorage (no cookie), isn't derived from
+// the visitor, and is replaced on "Start over". Without crypto.randomUUID
+// (very old browsers), no ID is sent and each exchange stands alone.
+function newConversationId() {
+  return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : '';
+}
+
+function loadConversationId() {
+  try {
+    const saved = sessionStorage.getItem(CONVERSATION_ID_KEY);
+    if (saved) return saved;
+  } catch {
+    // Storage blocked: a fresh ID per page load is fine.
+  }
+  return newConversationId();
+}
+
+function saveConversationId(id) {
+  try {
+    if (id) sessionStorage.setItem(CONVERSATION_ID_KEY, id);
+  } catch {
+    // Storage blocked: the ID just won't survive navigation.
   }
 }
 
@@ -117,6 +149,7 @@ export default function ChatWidget() {
   // can't cause a hydration mismatch: the conversation is only rendered once
   // the panel is opened.
   const [messages, setMessages] = useState(loadConversation);
+  const [conversationId, setConversationId] = useState(loadConversationId);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
 
@@ -129,6 +162,10 @@ export default function ChatWidget() {
   useEffect(() => {
     saveConversation(messages);
   }, [messages]);
+
+  useEffect(() => {
+    saveConversationId(conversationId);
+  }, [conversationId]);
 
   // Keep the newest message (or the typing indicator) in view.
   useEffect(() => {
@@ -171,7 +208,7 @@ export default function ChatWidget() {
     setDraft('');
     setSending(true);
 
-    const { route, reply, source } = await sendChatMessage(requestWindow(next));
+    const { route, reply, source } = await sendChatMessage(requestWindow(next), conversationId);
     setMessages([...next, { role: 'assistant', content: reply, route, source }]);
     setSending(false);
     // Switched off while the conversation was open.
@@ -205,7 +242,10 @@ export default function ChatWidget() {
               <button
                 type="button"
                 className="chat-widget__text-button"
-                onClick={() => setMessages([])}
+                onClick={() => {
+                  setMessages([]);
+                  setConversationId(newConversationId());
+                }}
                 disabled={sending}
               >
                 Start over
@@ -311,6 +351,7 @@ export default function ChatWidget() {
                     Send
                   </button>
                 </div>
+                <p className="chat-widget__privacy">{PRIVACY_TEXT}</p>
               </form>
             </>
           )}
