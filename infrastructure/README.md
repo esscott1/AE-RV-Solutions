@@ -470,7 +470,7 @@ Browser ─► /employees/ (public shell)
 |---|---|
 | User pool `ae-rv-employees` | Essentials tier (free up to 10,000 monthly users). Admin-created accounts only, no sign-up. Deletion protection + `prevent_destroy` |
 | Sign-in | A password (14+ characters) or a **passkey** (fingerprint, face, or PIN, with user verification required) |
-| MFA | **Required** (`ON`). A password sign-in needs an authenticator-app (TOTP) code. A passkey with user verification counts as both factors (`FactorConfiguration = MULTI_FACTOR_WITH_USER_VERIFICATION`). The AWS provider can't set that yet, so `terraform_data.passkey_counts_as_mfa` sets it with the AWS CLI during apply. Without it, Cognito hides the passkey option from anyone who has MFA. Check it with `aws cognito-idp get-user-pool-mfa-config --user-pool-id "$POOL"` |
+| MFA | **Required** (`ON`). A password sign-in needs an authenticator-app (TOTP) code. A passkey with user verification counts as both factors (`FactorConfiguration = MULTI_FACTOR_WITH_USER_VERIFICATION`). The AWS provider can't set that, and it can't turn MFA `ON` without it (Cognito rejects the combination). So `terraform_data.mfa_config` applies the whole MFA configuration with the AWS CLI during apply, from `local.mfa` in `cognito.tf`, and the pool resource ignores those three settings. Terraform can't read them back, so check them with `aws cognito-idp get-user-pool-mfa-config --user-pool-id "$POOL"` |
 | Email | Cognito's built-in email (50 a day): invites and password resets only. There's no SES, because only email sign-in codes would need it |
 | Tokens | ID and access tokens last 60 minutes, and the refresh token 12 hours |
 | `admins` group | For the Admin page (Phase 2). Its members see `"isAdmin": true` from `/me` |
@@ -526,8 +526,12 @@ callback, so sign-in works against the real pool.
 
 ### Not yet covered
 
-- A native provider argument for `FactorConfiguration`. Replace
-  `terraform_data.passkey_counts_as_mfa` when the AWS provider adds one.
+- A native provider argument for `FactorConfiguration`
+  ([hashicorp/terraform-provider-aws#47598](https://github.com/hashicorp/terraform-provider-aws/issues/47598),
+  open PR #48388). Once it ships, move `local.mfa` back onto the pool
+  resource, drop its `ignore_changes`, and remove `terraform_data.mfa_config`.
+- Drift detection for the MFA settings: `terraform plan` can't see a change
+  made in the console.
 - A custom login domain. Pin the passkey relying party ID to the prefix
   domain first, or every passkey stops working.
 - API access logs (the Lambda logs each call, by user ID).
