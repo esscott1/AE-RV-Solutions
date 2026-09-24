@@ -149,9 +149,11 @@ locals {
   }
 
   # One transcript file per exchange (see transcripts.tf). In Record,
-  # $states.input is the reply being returned.
+  # $states.input is the reply being returned. The body is an object, not a
+  # string: the S3 integration serializes it to JSON, and a string would be
+  # JSON-encoded a second time (a quoted string in the file).
   transcript_key  = "'${local.transcripts_prefix}' & $fromMillis($millis(), '[Y0001]/[M01]/[D01]/[H01][m01][s01]') & '-' & $states.context.Execution.Name & '.json'"
-  transcript_body = "$string({'time': $now(), 'executionId': $states.context.Execution.Name, 'route': $states.input.route, 'source': $states.input.source, 'messages': $messages, 'reply': $states.input.reply, 'tokens': {'classify': {'input': $classify_in, 'output': $classify_out}, 'answer': {'input': $answer_in, 'output': $answer_out}}})"
+  transcript_body = "{'time': $now(), 'executionId': $states.context.Execution.Name, 'route': $states.input.route, 'source': $states.input.source, 'messages': $messages, 'reply': $states.input.reply, 'tokens': {'classify': {'input': $classify_in, 'output': $classify_out}, 'answer': {'input': $answer_in, 'output': $answer_out}}}"
 
   valid_conversation = join(" and ", [
     "$type($messages) = 'array'",
