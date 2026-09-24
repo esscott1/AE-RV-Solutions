@@ -89,10 +89,20 @@ data "aws_iam_policy_document" "github_actions_terraform_employees" {
     resources = [local.employees_user_pool_arn]
   }
 
+  # Creating a tagged HTTP API stage also calls apigateway:TagResource on
+  # /apis/<id>/stages (found by the first apply's AccessDenied).
   statement {
-    sid       = "ManageEmployeeApi"
-    effect    = "Allow"
-    actions   = ["apigateway:GET", "apigateway:POST", "apigateway:PUT", "apigateway:PATCH", "apigateway:DELETE"]
+    sid    = "ManageEmployeeApi"
+    effect = "Allow"
+    actions = [
+      "apigateway:GET",
+      "apigateway:POST",
+      "apigateway:PUT",
+      "apigateway:PATCH",
+      "apigateway:DELETE",
+      "apigateway:TagResource",
+      "apigateway:UntagResource",
+    ]
     resources = local.employees_apigateway_arns
   }
 
