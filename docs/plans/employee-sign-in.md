@@ -5,12 +5,13 @@ Phase 1 is in progress.
 
 **Found while building PR 1** (these override the tables below):
 - AWS provider 6.66 (the newest release) has no `FactorConfiguration`
-  setting, so a passkey can't count as MFA in Terraform yet. The pool uses
-  **MFA `OPTIONAL`** with an authenticator app (TOTP), and the runbook requires
-  every employee to enroll one. Switch to `ON` once the provider supports it.
-  The first real sign-in must confirm that a TOTP-enrolled user can still
-  sign in with a passkey. If they can't, decide between the two before
-  onboarding employees.
+  setting. PR 1 shipped **MFA `OPTIONAL`** as a fallback. The first real
+  sign-in showed the fallback fails: with `SINGLE_FACTOR` (Cognito's
+  default), a user with an authenticator app is never offered passkey
+  sign-in. The fix (2026-09-24, owner's choice): **MFA `ON`**, with
+  `MULTI_FACTOR_WITH_USER_VERIFICATION` set by the AWS CLI from a
+  `terraform_data` provisioner that reruns whenever the pool's MFA or
+  passkey settings change.
 - The passkey relying party ID is **not pinned**. The pool is created
   before its domain exists, so pinning would need a second apply. The
   default is the prefix domain. Pin it before adding a custom domain.
