@@ -43,3 +43,9 @@ variable "domain_name" {
   type        = string
   default     = ""
 }
+
+variable "tags" {
+  description = "Tags applied to the app and branch (the webhook and domain association can't be tagged)."
+  type        = map(string)
+  default     = {}
+}

@@ -32,6 +32,10 @@ module "amplify" {
   github_access_token = var.github_access_token
   domain_name         = var.domain_name
 
+  tags = {
+    Customer = "AERVSolutions"
+  }
+
   # Build-time settings for the site's chat widget. Astro only exposes
   # PUBLIC_-prefixed variables to browser code. Both values are public by
   # design (the key only applies the usage plan), so they appear in plan

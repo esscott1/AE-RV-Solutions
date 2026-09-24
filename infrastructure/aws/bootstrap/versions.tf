@@ -12,4 +12,13 @@ terraform {
 provider "aws" {
   region  = var.region
   profile = var.profile
+
+  # Every resource bootstrap creates is tagged. IAM inline policies, the SNS
+  # subscription, and the S3 bucket's sub-resources can't be; the provider
+  # skips those.
+  default_tags {
+    tags = {
+      Customer = "AERVSolutions"
+    }
+  }
 }

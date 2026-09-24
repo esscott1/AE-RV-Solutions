@@ -43,6 +43,7 @@ resource "aws_amplify_app" "this" {
   build_spec               = local.build_spec
   environment_variables    = local.environment_variables
   enable_branch_auto_build = false
+  tags                     = var.tags
 
   lifecycle {
     # AWS never returns the token back, so every plan would otherwise show
@@ -67,6 +68,8 @@ resource "aws_amplify_branch" "this" {
   # the webhook below, gated through a GitHub Actions workflow that skips
   # infrastructure-only changes. See infrastructure/README.md.
   enable_auto_build = false
+
+  tags = var.tags
 
   lifecycle {
     prevent_destroy = true

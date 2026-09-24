@@ -39,3 +39,4 @@ override.tf.json
 
 # Lambda zips built by archive_file during plan/apply
 infrastructure/aws/modules/*/.build/
+*.tfplan
