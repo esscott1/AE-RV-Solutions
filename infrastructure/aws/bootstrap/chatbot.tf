@@ -16,6 +16,7 @@ locals {
   chatbot_parameter_arn     = "arn:aws:ssm:${var.region}:${local.account_id}:parameter/ae-rv/chatbot/*"
   chatbot_flag_arn          = "arn:aws:ssm:${var.region}:${local.account_id}:parameter/ae-rv/chatbot/enabled"
   chatbot_alarm_arn         = "arn:aws:cloudwatch:${var.region}:${local.account_id}:alarm:${local.chatbot_prefix}-*"
+  chatbot_transcripts_arn   = "arn:aws:s3:::${local.chatbot_prefix}-transcripts-*"
 
   # REST API resources have no account in their ARN, so API Gateway access
   # can only be scoped to these paths, not to one API.
@@ -147,6 +148,26 @@ data "aws_iam_policy_document" "github_actions_terraform_chatbot" {
     resources = ["arn:aws:states:${var.region}:${local.account_id}:stateMachine:*"]
   }
 
+  # The transcripts bucket (modules/chatbot/transcripts.tf). Get* is
+  # bucket-level only (the resource is the bucket, not its objects), so CI
+  # can configure the bucket but never read a transcript.
+  statement {
+    sid    = "ManageChatbotTranscriptsBucket"
+    effect = "Allow"
+    actions = [
+      "s3:CreateBucket",
+      "s3:DeleteBucket",
+      "s3:ListBucket",
+      "s3:Get*",
+      "s3:PutEncryptionConfiguration",
+      "s3:PutBucketPublicAccessBlock",
+      "s3:PutBucketOwnershipControls",
+      "s3:PutBucketTagging",
+      "s3:PutLifecycleConfiguration",
+    ]
+    resources = [local.chatbot_transcripts_arn]
+  }
+
   # List/describe calls that AWS only authorizes on "*".
   statement {
     sid    = "DescribeOnly"
@@ -216,6 +237,13 @@ data "aws_iam_policy_document" "github_actions_terraform_plan_chatbot" {
     effect    = "Allow"
     actions   = ["states:ValidateStateMachineDefinition"]
     resources = ["arn:aws:states:${var.region}:${local.account_id}:stateMachine:*"]
+  }
+
+  statement {
+    sid       = "ReadChatbotTranscriptsBucket"
+    effect    = "Allow"
+    actions   = ["s3:ListBucket", "s3:Get*"]
+    resources = [local.chatbot_transcripts_arn]
   }
 
   statement {

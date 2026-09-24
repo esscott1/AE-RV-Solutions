@@ -105,3 +105,9 @@ variable "kb_min_score" {
   type        = number
   default     = 0.4
 }
+
+variable "transcript_retention_days" {
+  description = "Days a chat transcript is kept in the transcripts bucket before S3 deletes it."
+  type        = number
+  default     = 30
+}

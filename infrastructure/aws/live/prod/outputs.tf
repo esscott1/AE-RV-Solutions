@@ -78,3 +78,8 @@ output "employees_api_url" {
   description = "Employee API base URL. Put it in site/.env as PUBLIC_EMPLOYEE_API_URL."
   value       = module.employees.api_url
 }
+
+output "chat_transcripts_bucket" {
+  description = "Chat transcripts (one JSON file per exchange, kept 30 days). Browse in the S3 console."
+  value       = module.chatbot.transcripts_bucket
+}

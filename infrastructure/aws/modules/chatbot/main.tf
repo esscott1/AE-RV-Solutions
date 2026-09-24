@@ -91,6 +91,13 @@ data "aws_iam_policy_document" "sfn" {
     resources = [aws_bedrockagent_knowledge_base.kb.arn]
   }
 
+  # Write-only: the flow can add transcripts but never read or delete them.
+  statement {
+    sid       = "WriteTranscripts"
+    actions   = ["s3:PutObject"]
+    resources = ["${aws_s3_bucket.transcripts.arn}/${local.transcripts_prefix}*"]
+  }
+
   # Step Functions log delivery; AWS only authorizes these on "*".
   statement {
     sid = "LogDelivery"
@@ -134,6 +141,18 @@ locals {
   # "" when nothing qualifies.
   retrieved_documents = "($hits := $states.result.RetrievalResults[Score >= ${var.kb_min_score}].Content.Text; $exists($hits) ? $join($hits, '\\n\\n---\\n\\n') : '')"
 
+  # A Bedrock call's token count, or 0 if the response has none, so recording
+  # usage can never make Classify or Answer fail.
+  usage_tokens = {
+    for field in ["input_tokens", "output_tokens"] :
+    field => "{% $exists($states.result.Body.usage.${field}) ? $states.result.Body.usage.${field} : 0 %}"
+  }
+
+  # One transcript file per exchange (see transcripts.tf). In Record,
+  # $states.input is the reply being returned.
+  transcript_key  = "'${local.transcripts_prefix}' & $fromMillis($millis(), '[Y0001]/[M01]/[D01]/[H01][m01][s01]') & '-' & $states.context.Execution.Name & '.json'"
+  transcript_body = "$string({'time': $now(), 'executionId': $states.context.Execution.Name, 'route': $states.input.route, 'source': $states.input.source, 'messages': $messages, 'reply': $states.input.reply, 'tokens': {'classify': {'input': $classify_in, 'output': $classify_out}, 'answer': {'input': $answer_in, 'output': $answer_out}}})"
+
   valid_conversation = join(" and ", [
     "$type($messages) = 'array'",
     "$count($messages) >= 1",
@@ -151,21 +170,36 @@ locals {
     for route, text in local.replies : "Reply_${route}" => {
       Type   = "Pass"
       Output = { route = route, reply = text }
-      End    = true
+      Next   = "Record"
     }
   }
 
   definition = {
     Comment       = "A&E RV Solutions public chatbot: on/off flag, then the safety gate (classifier), then an answer or a fixed reply."
     QueryLanguage = "JSONata"
-    StartAt       = "CheckFlag"
+    StartAt       = "Init"
     States = merge(local.fixed_reply_states, {
+      # Variables every later state (and Record) relies on, set before
+      # anything can fail. A missing messages field becomes [], which
+      # Validate rejects.
+      Init = {
+        Type = "Pass"
+        Assign = {
+          messages     = "{% $exists($states.input.messages) ? $states.input.messages : [] %}"
+          documents    = ""
+          classify_in  = 0
+          classify_out = 0
+          answer_in    = 0
+          answer_out   = 0
+        }
+        Next = "CheckFlag"
+      }
+
       # A missing or unreadable flag counts as off.
       CheckFlag = {
         Type      = "Task"
         Resource  = "arn:aws:states:::aws-sdk:ssm:getParameter"
         Arguments = { Name = local.flag_name }
-        Assign    = { messages = "{% $states.input.messages %}", documents = "" }
         Output    = { enabled = "{% $states.result.Parameter.Value = 'true' %}" }
         Catch     = [{ ErrorEquals = ["States.ALL"], Next = "Reply_offline" }]
         Next      = "IsEnabled"
@@ -221,6 +255,7 @@ locals {
           }
         }
         Output = { route = "{% ($states.result.Body.content[type = 'tool_use'].input.route)[0] %}" }
+        Assign = { classify_in = local.usage_tokens.input_tokens, classify_out = local.usage_tokens.output_tokens }
         Retry  = local.bedrock_retry
         Catch  = [{ ErrorEquals = ["States.ALL"], Next = "Reply_safety_referral" }]
         Next   = "Route"
@@ -301,9 +336,33 @@ locals {
         # it's "general" whatever the model says: the knowledge base can't be
         # credited with an answer it never supplied.
         Output = "{% ($in := ($states.result.Body.content[type = 'tool_use'].input)[0]; $text := $in.answer; $ok := $states.result.Body.stop_reason = 'tool_use' and $type($text) = 'string' and $length($text) > 0; $src := $documents = '' ? 'general' : ($in.source in ['knowledge_base', 'both', 'general'] ? $in.source : 'general'); $ok ? {'route': 'answer', 'reply': $text, 'source': $src} : {'route': 'unavailable', 'reply': \"${local.replies.unavailable}\"}) %}"
+        Assign = { answer_in = local.usage_tokens.input_tokens, answer_out = local.usage_tokens.output_tokens }
         Retry  = local.bedrock_retry
         Catch  = [{ ErrorEquals = ["States.ALL"], Next = "Reply_unavailable" }]
+        Next   = "Record"
+      }
+
+      # Saves the exchange (transcripts.tf), then returns the reply
+      # unchanged. Every reply passes through here. A failed write is caught
+      # and the reply still goes out: storage can never break or change a
+      # chat.
+      Record = {
+        Type     = "Task"
+        Resource = "arn:aws:states:::aws-sdk:s3:putObject"
+        Arguments = {
+          Bucket      = aws_s3_bucket.transcripts.bucket
+          Key         = "{% ${local.transcript_key} %}"
+          Body        = "{% ${local.transcript_body} %}"
+          ContentType = "application/json"
+        }
+        Output = "{% $states.input %}"
+        Catch  = [{ ErrorEquals = ["States.ALL"], Output = "{% $states.input %}", Next = "Done" }]
         End    = true
+      }
+
+      Done = {
+        Type = "Pass"
+        End  = true
       }
     })
   }
