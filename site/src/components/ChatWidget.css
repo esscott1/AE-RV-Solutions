@@ -219,6 +219,15 @@
   margin-top: 0.5rem;
 }
 
+/* Deliberately small and quiet: a footnote, not a banner. */
+.chat-widget__privacy {
+  margin: 0.5rem 0 0;
+  color: var(--pine-900);
+  font-size: 0.7rem;
+  line-height: 1.35;
+  opacity: 0.8;
+}
+
 .chat-widget__counter {
   color: var(--sage-600);
   font-size: 0.8rem;
