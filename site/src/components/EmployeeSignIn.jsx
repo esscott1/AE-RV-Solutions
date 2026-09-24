@@ -12,6 +12,7 @@ import {
   finishAuthenticatorSetup,
   getAccountSecurity,
   getEmployeeMe,
+  removePasskey,
   startAuthenticatorSetup,
 } from '../lib/api.js';
 import './EmployeeSignIn.css';
@@ -121,6 +122,21 @@ function AccountSecurity({ accessToken, email }) {
   const [security, setSecurity] = useState(null);
   const [loadError, setLoadError] = useState(false);
   const [settingUp, setSettingUp] = useState(false);
+  const [removing, setRemoving] = useState('');
+  const [removeError, setRemoveError] = useState('');
+
+  const remove = async (passkey) => {
+    if (!window.confirm(`Remove the passkey "${passkey.name}"? You won't be able to sign in with it.`)) return;
+    setRemoving(passkey.id);
+    setRemoveError('');
+    try {
+      await removePasskey(accessToken, passkey.id);
+      await load();
+    } catch {
+      setRemoveError('Couldn’t remove that passkey. Please try again.');
+    }
+    setRemoving('');
+  };
 
   const load = () =>
     getAccountSecurity(accessToken)
@@ -187,14 +203,44 @@ function AccountSecurity({ accessToken, email }) {
             <div>
               <p className="employee-sign-in__label">Passkeys</p>
               <p className="employee-sign-in__muted">
-                {security.passkeys === 0
+                {security.passkeys.length === 0
                   ? 'None yet. Sign in with your fingerprint, face, or device PIN instead of a password.'
-                  : `${security.passkeys} registered.`}
+                  : 'Sign in with any of these. Your device must confirm it’s you (PIN, fingerprint, or face) each time.'}
               </p>
             </div>
             <a className="employee-sign-in__button" href={addPasskeyUrl()}>
               Add a passkey
             </a>
+            {security.passkeys.length > 0 && (
+              <ul className="employee-sign-in__passkeys">
+                {security.passkeys.map((passkey) => (
+                  <li className="employee-sign-in__passkey" key={passkey.id}>
+                    <span>
+                      {passkey.name}
+                      {passkey.createdAt && (
+                        <span className="employee-sign-in__muted">
+                          {' '}
+                          · added {passkey.createdAt.toLocaleDateString()}
+                        </span>
+                      )}
+                    </span>
+                    <button
+                      className="employee-sign-in__button employee-sign-in__button--quiet"
+                      type="button"
+                      disabled={removing === passkey.id}
+                      onClick={() => remove(passkey)}
+                    >
+                      {removing === passkey.id ? 'Removing…' : 'Remove'}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {removeError && (
+              <p className="employee-sign-in__error" role="alert">
+                {removeError}
+              </p>
+            )}
           </li>
         </ul>
       )}

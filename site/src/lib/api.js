@@ -115,7 +115,9 @@ async function cognito(operation, body) {
   return data;
 }
 
-// {authenticator: bool, passkeys: number} for the signed-in employee.
+// {authenticator: bool, passkeys: [{id, name, createdAt}]} for the
+// signed-in employee. The name is what the passkey provider reported (e.g.
+// the password manager that holds it).
 export async function getAccountSecurity(accessToken) {
   const [user, passkeys] = await Promise.all([
     cognito('GetUser', { AccessToken: accessToken }),
@@ -123,8 +125,18 @@ export async function getAccountSecurity(accessToken) {
   ]);
   return {
     authenticator: (user.UserMFASettingList ?? []).includes('SOFTWARE_TOKEN_MFA'),
-    passkeys: (passkeys.Credentials ?? []).length,
+    passkeys: (passkeys.Credentials ?? []).map((credential) => ({
+      id: credential.CredentialId,
+      name: credential.FriendlyCredentialName || 'Passkey',
+      // CreatedAt is epoch seconds.
+      createdAt: credential.CreatedAt ? new Date(credential.CreatedAt * 1000) : null,
+    })),
   };
+}
+
+// Removes one of the signed-in employee's own passkeys.
+export async function removePasskey(accessToken, credentialId) {
+  await cognito('DeleteWebAuthnCredential', { AccessToken: accessToken, CredentialId: credentialId });
 }
 
 // Step 1 of authenticator setup: returns the secret the app needs.
