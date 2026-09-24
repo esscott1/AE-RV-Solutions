@@ -153,9 +153,14 @@ locals {
   # string: the S3 integration serializes it to JSON, and a string would be
   # JSON-encoded a second time (a quoted string in the file).
   transcript_key  = "'${local.transcripts_prefix}' & $fromMillis($millis(), '[Y0001]/[M01]/[D01]/[H01][m01][s01]') & '-' & $states.context.Execution.Name & '.json'"
-  transcript_body = "{'time': $now(), 'executionId': $states.context.Execution.Name, 'route': $states.input.route, 'source': $states.input.source, 'messages': $messages, 'reply': $states.input.reply, 'tokens': {'classify': {'input': $classify_in, 'output': $classify_out}, 'answer': {'input': $answer_in, 'output': $answer_out}}}"
+  transcript_body = "{'time': $now(), 'executionId': $states.context.Execution.Name, 'conversationId': $conversationId, 'route': $states.input.route, 'source': $states.input.source, 'messages': $messages, 'reply': $states.input.reply, 'tokens': {'classify': {'input': $classify_in, 'output': $classify_out}, 'answer': {'input': $answer_in, 'output': $answer_out}}}"
+
+  # Lowercase UUID, as crypto.randomUUID() makes. Shared by the API's request
+  # model and the state machine.
+  conversation_id_pattern = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
 
   valid_conversation = join(" and ", [
+    "$conversationId != ''",
     "$type($messages) = 'array'",
     "$count($messages) >= 1",
     "$count($messages) <= ${var.max_messages}",
@@ -187,12 +192,16 @@ locals {
       Init = {
         Type = "Pass"
         Assign = {
-          messages     = "{% $exists($states.input.messages) ? $states.input.messages : [] %}"
-          documents    = ""
-          classify_in  = 0
-          classify_out = 0
-          answer_in    = 0
-          answer_out   = 0
+          messages = "{% $exists($states.input.messages) ? $states.input.messages : [] %}"
+          # The widget's ID; the execution ID when none was sent (so the
+          # exchange is its own conversation); "" when malformed, which
+          # Validate rejects.
+          conversationId = "{% $exists($states.input.conversationId) ? ($type($states.input.conversationId) = 'string' and $contains($states.input.conversationId, /${local.conversation_id_pattern}/) ? $states.input.conversationId : '') : $states.context.Execution.Name %}"
+          documents      = ""
+          classify_in    = 0
+          classify_out   = 0
+          answer_in      = 0
+          answer_out     = 0
         }
         Next = "CheckFlag"
       }

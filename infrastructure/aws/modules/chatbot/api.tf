@@ -81,6 +81,12 @@ resource "aws_api_gateway_model" "chat_request" {
     additionalProperties = false
     required             = ["messages"]
     properties = {
+      # Optional. A random ID the widget creates per conversation (lowercase
+      # UUID), so transcripts can be grouped. Not tied to the visitor.
+      conversationId = {
+        type    = "string"
+        pattern = local.conversation_id_pattern
+      }
       messages = {
         type     = "array"
         minItems = 1
@@ -138,14 +144,17 @@ resource "aws_api_gateway_integration" "chat_post" {
   credentials             = aws_iam_role.apigw.arn
   passthrough_behavior    = "NEVER"
 
-  # Only `messages` is forwarded. escapeJavaScript also escapes single
-  # quotes as \', which isn't valid JSON, so those are undone.
+  # Only `messages` (and `conversationId`, when sent) is forwarded. The model
+  # has already checked conversationId against a UUID pattern, so it's safe
+  # to embed as-is. escapeJavaScript also escapes single quotes as \', which
+  # isn't valid JSON, so those are undone.
   request_templates = {
     "application/json" = <<-EOT
       #set($messages = $util.escapeJavaScript($input.json('$.messages')).replaceAll("\\'", "'"))
+      #set($cid = $input.path('$.conversationId'))
       {
         "stateMachineArn": "${aws_sfn_state_machine.flow.arn}",
-        "input": "{\"messages\": $messages}"
+        "input": "{\"messages\": $messages#if($cid), \"conversationId\": \"$cid\"#end}"
       }
     EOT
   }

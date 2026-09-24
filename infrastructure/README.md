@@ -314,7 +314,7 @@ last state, `Record`, writes it, and S3 deletes it after 30 days
 
 | Stored | Never stored |
 |---|---|
-| The time and the execution ID | IP addresses, user agents, or any other identifier (the API forwards only the messages) |
+| The time, the execution ID, and a **conversation ID**: a random UUID the widget creates per conversation and keeps only in the tab's session storage (no cookie). It groups a visitor's exchanges and isn't tied to the visitor. Requests without one get the execution ID, so the exchange stands alone | IP addresses, user agents, or any other identifier (the API forwards only the messages and the conversation ID) |
 | The route (answer, safety_referral, emergency, decline, unavailable, invalid, offline) and the source label | |
 | The conversation the widget sent (at most 8 messages) and Eddie's reply | |
 | Input and output token counts for the Classify and Answer calls | |
