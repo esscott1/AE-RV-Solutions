@@ -1,16 +1,13 @@
 ---
-// Site menu: a hamburger button (top left, in BaseLayout's top bar) that
-// opens a small panel of links. A static component with a few lines of
-// script, not a React island.
-//
-// Items marked `requires` appear only for signed-in employees in that
-// Cognito group. That's display only: the pages and API check for
-// themselves.
+// Site menu: a hamburger button at the far left of BaseLayout's banner that
+// opens a small panel of links: the public pages, plus Employees (sign-in,
+// then the Employees landing page). Pages for signed-in employees are in the
+// account menu on the right. A static component with a few lines of script,
+// not a React island.
 const links = [
   { href: '/', label: 'Home' },
   { href: '/testimonials/', label: 'Testimonials' },
   { href: '/employees/', label: 'Employees' },
-  { href: '/ai-stats/', label: 'AI Stats', requires: 'admins' },
 ];
 
 // Astro serves pages at /path/ (directory format), so normalize both sides
@@ -33,8 +30,8 @@ const current = trim(Astro.url.pathname);
   </button>
 
   <ul class="site-nav__menu" id="site-nav-menu" hidden>
-    {links.map(({ href, label, requires }) => (
-      <li data-requires={requires} hidden={requires ? true : undefined}>
+    {links.map(({ href, label }) => (
+      <li>
         <a
           class="site-nav__link"
           href={href}
@@ -48,39 +45,6 @@ const current = trim(Astro.url.pathname);
 </nav>
 
 <script>
-  // Shows signed-in items from the session oidc-client-ts keeps in
-  // sessionStorage ("oidc.user:<issuer>:<client>"), read directly so public
-  // pages don't load the sign-in library. auth.js announces sign-in and
-  // sign-out, so the menu updates without a reload.
-  function signedInGroups(): string[] {
-    try {
-      for (let i = 0; i < sessionStorage.length; i++) {
-        const key = sessionStorage.key(i);
-        if (!key?.startsWith('oidc.user:')) continue;
-        const user = JSON.parse(sessionStorage.getItem(key) ?? 'null');
-        if (!user?.expires_at || user.expires_at * 1000 < Date.now()) continue;
-        const groups = user.profile?.['cognito:groups'];
-        return Array.isArray(groups) ? groups : [];
-      }
-    } catch {
-      // Storage blocked or unreadable: treat as signed out.
-    }
-    return [];
-  }
-
-  function showSignedInItems() {
-    const groups = signedInGroups();
-    document.querySelectorAll<HTMLLIElement>('.site-nav__menu [data-requires]').forEach((item) => {
-      item.hidden = !groups.includes(item.dataset.requires ?? '');
-    });
-  }
-
-  showSignedInItems();
-  window.addEventListener('ae-rv-auth-change', showSignedInItems);
-  // Another tab signing out doesn't share sessionStorage, but a page
-  // restored from the back/forward cache should re-check.
-  window.addEventListener('pageshow', showSignedInItems);
-
   const nav = document.querySelector<HTMLElement>('.site-nav');
   const toggle = nav?.querySelector<HTMLButtonElement>('.site-nav__toggle');
   const menu = nav?.querySelector<HTMLUListElement>('.site-nav__menu');
@@ -110,30 +74,28 @@ const current = trim(Astro.url.pathname);
 </script>
 
 <style>
-  /* Placed by BaseLayout's top bar (top left). */
+  /* Far left of BaseLayout's banner. The menu drops down below it. */
   .site-nav {
+    position: relative;
     display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.5rem;
+    align-items: center;
     font-family: var(--font-body);
   }
 
-  /* 44px minimum tap target. */
+  /* 40px square: fits the 50px banner with room around it. */
   .site-nav__toggle {
     display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center;
     gap: 5px;
-    width: 48px;
-    height: 48px;
+    width: 40px;
+    height: 40px;
     padding: 0;
     border: 0;
-    border-radius: 10px;
-    background: var(--pine-950);
+    border-radius: 8px;
+    background: transparent;
     cursor: pointer;
-    box-shadow: 0 4px 14px rgba(14, 21, 18, 0.25);
     transition: background-color 0.15s ease;
   }
 
@@ -164,6 +126,9 @@ const current = trim(Astro.url.pathname);
   }
 
   .site-nav__menu {
+    position: absolute;
+    top: calc(100% + 9px);
+    left: 0;
     min-width: 12rem;
     margin: 0;
     padding: 0.4rem;
@@ -174,8 +139,7 @@ const current = trim(Astro.url.pathname);
     box-shadow: 0 12px 32px rgba(14, 21, 18, 0.22);
   }
 
-  .site-nav__menu[hidden],
-  .site-nav__menu li[hidden] {
+  .site-nav__menu[hidden] {
     display: none;
   }
 

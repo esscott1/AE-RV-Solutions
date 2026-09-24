@@ -30,9 +30,10 @@ const {
     <title>{title}</title>
   </head>
   <body>
-    <!-- Top bar: menu on the left and, while an employee is signed in, their
-         account menu on the right, like the AWS console. It scrolls with the
-         page and sits below the chat window in the stacking order. -->
+    <!-- Navigation banner above the page: the site menu (public pages +
+         Employees) on the left and, while an employee is signed in, their
+         account menu (employee pages + Sign out) on the right, like the AWS
+         console. It sits below the chat window in the stacking order. -->
     <header class="site-header">
       <SiteNav />
       <AccountMenu />
@@ -48,21 +49,15 @@ const {
 
 <style>
   .site-header {
-    position: absolute;
-    top: 1rem;
-    left: 1rem;
-    right: 1rem;
+    position: relative;
     z-index: 40;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 1rem;
-    /* The bar spans the page, but only its buttons take clicks: the hero
-       photo underneath stays clickable. */
-    pointer-events: none;
-  }
-
-  .site-header > :global(*) {
-    pointer-events: auto;
+    height: 50px;
+    padding: 0 0.75rem;
+    background: var(--pine-950);
+    color: var(--canvas-50);
   }
 </style>
