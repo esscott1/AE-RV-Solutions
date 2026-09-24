@@ -20,8 +20,8 @@ export const signInConfigured = Boolean(
 // /employees/ is registered on the Cognito app client.
 const pageUrl = () => `${window.location.origin}/employees/`;
 
-// SiteNav listens for this to show or hide its signed-in menu items. It
-// reads the session itself, so public pages don't load this module.
+// SiteNav and AccountMenu listen for this to update for sign-in. They
+// read the session themselves, so public pages don't load this module.
 export const AUTH_CHANGE_EVENT = 'ae-rv-auth-change';
 function announceAuthChange() {
   window.dispatchEvent(new Event(AUTH_CHANGE_EVENT));
@@ -72,42 +72,8 @@ export async function currentUser() {
   }
 }
 
-// The signed-in user if their tokens are still valid, without renewing
-// them. For display only (the account menu); pages that call the API use
-// currentUser().
-export async function signedInUser() {
-  if (!signInConfigured) return null;
-  const user = await userManager().getUser();
-  return user && !user.expired ? user : null;
-}
-
-// Calls back with the user whenever sign-in completes or tokens are
-// cleared, so the account menu updates when a page finishes signing in.
-// Returns an unsubscribe function.
-export function onUserChange(callback) {
-  if (!signInConfigured) return () => {};
-  const { events } = userManager();
-  const loaded = (user) => callback(user);
-  const unloaded = () => callback(null);
-  events.addUserLoaded(loaded);
-  events.addUserUnloaded(unloaded);
-  return () => {
-    events.removeUserLoaded(loaded);
-    events.removeUserUnloaded(unloaded);
-  };
-}
-
 export function signIn() {
   return userManager().signinRedirect();
-}
-
-// Clears the tokens here, then Cognito's own session, so the next sign-in
-// asks for credentials again.
-export async function signOut() {
-  await userManager().removeUser();
-  announceAuthChange();
-  const query = new URLSearchParams({ client_id: CLIENT_ID, logout_uri: pageUrl() });
-  window.location.assign(`https://${DOMAIN}/logout?${query}`);
 }
 
 // Cognito's managed page for registering a passkey. It uses the sign-in

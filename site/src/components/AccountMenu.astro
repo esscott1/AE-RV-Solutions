@@ -1,0 +1,209 @@
+---
+// The signed-in employee's name at the top right of every page, like the AWS
+// console: click it for a menu with Sign out. Hidden while signed out.
+//
+// Static markup and a small script, not a React island, so public pages
+// don't load React or the sign-in library just for this. It reads the
+// session oidc-client-ts keeps in sessionStorage and signs out the same way
+// auth.js does (clear it, then Cognito's logout page).
+---
+
+<div class="account-menu" hidden>
+  <button
+    type="button"
+    class="account-menu__toggle"
+    aria-haspopup="true"
+    aria-expanded="false"
+    aria-controls="account-menu-panel"
+  >
+    <span class="account-menu__name"></span>
+    <span class="account-menu__caret" aria-hidden="true">▾</span>
+  </button>
+  <div class="account-menu__panel" id="account-menu-panel" hidden>
+    <p class="account-menu__signed-in">
+      Signed in as
+      <span class="account-menu__email"></span>
+    </p>
+    <button type="button" class="account-menu__item" data-sign-out>Sign out</button>
+  </div>
+</div>
+
+<script>
+  const DOMAIN = import.meta.env.PUBLIC_COGNITO_DOMAIN;
+  const CLIENT_ID = import.meta.env.PUBLIC_COGNITO_CLIENT_ID;
+
+  const root = document.querySelector<HTMLElement>('.account-menu');
+  const toggle = root?.querySelector<HTMLButtonElement>('.account-menu__toggle');
+  const panel = root?.querySelector<HTMLElement>('.account-menu__panel');
+
+  // [sessionStorage key, email] of an unexpired session, or null.
+  function session(): [string, string] | null {
+    try {
+      for (let i = 0; i < sessionStorage.length; i++) {
+        const key = sessionStorage.key(i);
+        if (!key?.startsWith('oidc.user:')) continue;
+        const user = JSON.parse(sessionStorage.getItem(key) ?? 'null');
+        if (!user?.expires_at || user.expires_at * 1000 < Date.now()) continue;
+        return [key, user.profile?.email ?? 'Account'];
+      }
+    } catch {
+      // Storage blocked or unreadable: treat as signed out.
+    }
+    return null;
+  }
+
+  function setOpen(open: boolean, returnFocus = false) {
+    if (!toggle || !panel) return;
+    toggle.setAttribute('aria-expanded', String(open));
+    panel.hidden = !open;
+    if (open) panel.querySelector<HTMLButtonElement>('[data-sign-out]')?.focus();
+    else if (returnFocus) toggle.focus();
+  }
+
+  function render() {
+    if (!root) return;
+    const current = session();
+    root.hidden = !current;
+    if (!current) {
+      setOpen(false);
+      return;
+    }
+    root.querySelectorAll('.account-menu__name, .account-menu__email').forEach((el) => {
+      el.textContent = current[1];
+    });
+  }
+
+  if (root && toggle && panel) {
+    render();
+    window.addEventListener('ae-rv-auth-change', render);
+    window.addEventListener('pageshow', render);
+
+    toggle.addEventListener('click', () => setOpen(toggle.getAttribute('aria-expanded') !== 'true'));
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && !panel.hidden) setOpen(false, true);
+    });
+    document.addEventListener('click', (event) => {
+      if (!panel.hidden && !root.contains(event.target as Node)) setOpen(false);
+    });
+
+    // Clear this browser's tokens, then end Cognito's own session so the next
+    // sign-in asks again. Cognito returns to /employees/, the registered
+    // sign-out page.
+    root.querySelector('[data-sign-out]')?.addEventListener('click', () => {
+      const current = session();
+      if (current) sessionStorage.removeItem(current[0]);
+      window.dispatchEvent(new Event('ae-rv-auth-change'));
+      if (!DOMAIN || !CLIENT_ID) return;
+      const query = new URLSearchParams({
+        client_id: CLIENT_ID,
+        logout_uri: `${window.location.origin}/employees/`,
+      });
+      window.location.assign(`https://${DOMAIN}/logout?${query}`);
+    });
+  }
+</script>
+
+<style>
+  .account-menu {
+    position: relative;
+    font-family: var(--font-body);
+  }
+
+  .account-menu[hidden] {
+    display: none;
+  }
+
+  /* Compact, like the AWS console's account name. */
+  .account-menu__toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    max-width: min(16rem, 55vw);
+    min-height: 32px;
+    padding: 0.3rem 0.7rem;
+    border: 0;
+    border-radius: 6px;
+    background: var(--pine-950);
+    color: var(--canvas-50);
+    font: inherit;
+    font-size: 0.78rem;
+    font-weight: 500;
+    line-height: 1.2;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(14, 21, 18, 0.2);
+    transition: background-color 0.15s ease;
+  }
+
+  .account-menu__toggle:hover {
+    background: var(--pine-900);
+  }
+
+  .account-menu__name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .account-menu__caret {
+    font-size: 0.65rem;
+    transition: transform 0.15s ease;
+  }
+
+  .account-menu__toggle[aria-expanded='true'] .account-menu__caret {
+    transform: rotate(180deg);
+  }
+
+  .account-menu__panel {
+    position: absolute;
+    top: calc(100% + 0.4rem);
+    right: 0;
+    min-width: 13rem;
+    padding: 0.3rem;
+    background: var(--canvas-50);
+    border: 1px solid var(--sage-200);
+    border-radius: 8px;
+    box-shadow: 0 10px 28px rgba(14, 21, 18, 0.22);
+  }
+
+  .account-menu__panel[hidden] {
+    display: none;
+  }
+
+  .account-menu__signed-in {
+    margin: 0;
+    padding: 0.45rem 0.6rem 0.5rem;
+    border-bottom: 1px solid var(--sage-200);
+    color: var(--pine-900);
+    font-size: 0.72rem;
+  }
+
+  .account-menu__email {
+    display: block;
+    margin-top: 0.1rem;
+    color: var(--pine-950);
+    font-size: 0.8rem;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
+
+  .account-menu__item {
+    display: block;
+    width: 100%;
+    min-height: 36px;
+    margin-top: 0.3rem;
+    padding: 0.45rem 0.6rem;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--pine-950);
+    font: inherit;
+    font-size: 0.85rem;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .account-menu__item:hover,
+  .account-menu__item:focus-visible {
+    background: var(--canvas-100);
+  }
+</style>
