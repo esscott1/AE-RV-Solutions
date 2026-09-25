@@ -1,8 +1,9 @@
 """Knowledge administration API: Add Knowledge, KBValidation, KBViewer.
 
-Employees submit knowledge through a guided form; admins (the Cognito admins
-group) edit, approve or reject it; only approved Markdown is indexed into
-Eddie's knowledge base. Everything lives in the private documents bucket
+Employees submit knowledge through a guided form, or with a draft Herman
+wrote for them (assistant.py); admins (the Cognito admins group) edit,
+approve or reject it; only approved Markdown is indexed into Eddie's
+knowledge base. Everything lives in the private documents bucket
 (modules/chatbot/kb.tf), whose data source reads only approved/:
 
   pending/<id>.json               a submission awaiting review
@@ -20,15 +21,17 @@ admins group):
   DELETE /kb/documents/{id}          admin     remove, re-index
   POST   /kb/sync                    admin     re-index
 
-The Markdown is always built here from structured fields, so every file has
-the template structure Eddie's prompts rely on (the "Also possible with this
-setup" heading). Headings carry the topic so a ~300-token passage cut out of
-the middle of a file still says what it's about.
+The Markdown is always built from structured fields (knowledge_fields.py).
+
+Every entry records its author (Cognito `sub` and email) from the verified
+token's claims, never from the request body, so neither the browser nor
+Herman can set it. `origin` ("form" or "chat") and an optional `reviewNote`
+from Herman are kept for the reviewer; neither goes into the Markdown, which
+is what Eddie reads.
 
 Logs only the caller's ID and the route, never content.
 """
 
-import base64
 import datetime
 import json
 import os
@@ -40,118 +43,21 @@ from urllib.parse import quote, unquote
 import boto3
 from botocore.exceptions import ClientError
 
-from claims import claims_of, parse_groups, respond
+from claims import BadRequest, claims_of, parse_body, parse_groups, respond
+from knowledge_fields import FOLDERS, MAX_REVIEW_NOTE, build_markdown, clean_fields
 
 BUCKET = os.environ["KB_DOCS_BUCKET"]
 KNOWLEDGE_BASE_ID = os.environ["KNOWLEDGE_BASE_ID"]
 DATA_SOURCE_ID = os.environ["KB_DATA_SOURCE_ID"]
 
 PENDING, REJECTED, APPROVED = "pending/", "rejected/", "approved/"
-FOLDERS = {"capability": "capabilities", "faq": "faq", "note": "notes"}
 
-MAX_TITLE = 120
-MAX_QUESTION = 300
-MAX_HEADING = 120
-MAX_TEXT = 4000
-MAX_PAIRS = 20
-MAX_SECTIONS = 10
-MAX_MARKDOWN_BYTES = 20_000
 MAX_REASON = 500
+ORIGINS = ("form", "chat")
 ID_PATTERN = re.compile(r"^[0-9a-f]{32}$")
 
 s3 = boto3.client("s3")
 bedrock = boto3.client("bedrock-agent")
-
-
-class BadRequest(Exception):
-    pass
-
-
-# --- Fields -> Markdown -------------------------------------------------------
-
-def one_line(value, name, limit):
-    text = " ".join(str(value or "").split())
-    if not text:
-        raise BadRequest(f"{name} is required.")
-    if len(text) > limit:
-        raise BadRequest(f"{name} must be {limit} characters or fewer.")
-    return text
-
-
-def body_text(value, name):
-    text = str(value or "").replace("\r\n", "\n").strip()
-    if not text:
-        raise BadRequest(f"{name} is required.")
-    if len(text) > MAX_TEXT:
-        raise BadRequest(f"{name} must be {MAX_TEXT} characters or fewer.")
-    # A line starting with # would become a heading and break the template
-    # structure, so it's escaped to plain text.
-    return re.sub(r"(?m)^(\s*)#", r"\1\\#", text)
-
-
-def clean_fields(entry_type, fields):
-    """Validates the form fields for a type; returns the cleaned fields."""
-    if not isinstance(fields, dict):
-        raise BadRequest("fields must be an object.")
-    if entry_type == "capability":
-        return {
-            "title": one_line(fields.get("title"), "Title", MAX_TITLE),
-            "whatItTakes": body_text(fields.get("whatItTakes"), "What it takes"),
-            "howWeSetItUp": body_text(fields.get("howWeSetItUp"), "How A&E sets it up"),
-            "alsoPossible": body_text(fields.get("alsoPossible"), "Also possible with this setup"),
-        }
-    if entry_type == "faq":
-        pairs = fields.get("pairs")
-        if not isinstance(pairs, list) or not 1 <= len(pairs) <= MAX_PAIRS:
-            raise BadRequest(f"Add between 1 and {MAX_PAIRS} questions.")
-        return {
-            "title": one_line(fields.get("title"), "Topic", MAX_TITLE),
-            "pairs": [
-                {
-                    "question": one_line(p.get("question") if isinstance(p, dict) else None,
-                                         f"Question {i}", MAX_QUESTION),
-                    "answer": body_text(p.get("answer") if isinstance(p, dict) else None, f"Answer {i}"),
-                }
-                for i, p in enumerate(pairs, start=1)
-            ],
-        }
-    if entry_type == "note":
-        sections = fields.get("sections")
-        if not isinstance(sections, list) or not 1 <= len(sections) <= MAX_SECTIONS:
-            raise BadRequest(f"Add between 1 and {MAX_SECTIONS} sections.")
-        return {
-            "title": one_line(fields.get("title"), "Title", MAX_TITLE),
-            "sections": [
-                {
-                    "heading": one_line(s.get("heading") if isinstance(s, dict) else None,
-                                        f"Section {i} heading", MAX_HEADING),
-                    "body": body_text(s.get("body") if isinstance(s, dict) else None, f"Section {i} text"),
-                }
-                for i, s in enumerate(sections, start=1)
-            ],
-        }
-    raise BadRequest("type must be capability, faq, or note.")
-
-
-def build_markdown(entry_type, f):
-    title = f["title"]
-    if entry_type == "capability":
-        parts = [
-            f"# Capability: {title}",
-            f"## What it takes: {title}\n\n{f['whatItTakes']}",
-            f"## How A&E sets it up: {title}\n\n{f['howWeSetItUp']}",
-            f"## Also possible with this setup: {title}\n\n{f['alsoPossible']}",
-        ]
-    elif entry_type == "faq":
-        parts = [f"# Frequently asked questions: {title}"] + [
-            f"## Q: {p['question']}\n\n{p['answer']}" for p in f["pairs"]
-        ]
-    else:
-        parts = [f"# {title}"] + [f"## {title}: {s['heading']}\n\n{s['body']}" for s in f["sections"]]
-    markdown = "\n\n".join(parts) + "\n"
-    if len(markdown.encode("utf-8")) > MAX_MARKDOWN_BYTES:
-        raise BadRequest("This entry is too long. Split it into smaller entries.")
-    return markdown
 
 
 def slugify(title):
@@ -246,6 +152,12 @@ def last_indexing():
 def submit(caller, body):
     entry_type = body.get("type")
     fields = clean_fields(entry_type, body.get("fields"))
+    origin = body.get("origin") or "form"
+    if origin not in ORIGINS:
+        raise BadRequest("origin must be form or chat.")
+    review_note = " ".join(str(body.get("reviewNote") or "").split())
+    if len(review_note) > MAX_REVIEW_NOTE:
+        raise BadRequest(f"The review note must be {MAX_REVIEW_NOTE} characters or fewer.")
     entry = {
         "id": uuid.uuid4().hex,
         "type": entry_type,
@@ -253,7 +165,10 @@ def submit(caller, body):
         "markdown": build_markdown(entry_type, fields),
         "author": {"email": caller["email"], "sub": caller["sub"]},
         "submittedAt": now(),
+        "origin": origin,
     }
+    if review_note:
+        entry["reviewNote"] = review_note
     write_json(f"{PENDING}{entry['id']}.json", entry)
     return 201, {"entry": entry}
 
@@ -301,6 +216,8 @@ def approve(caller, body, entry_id):
             "entry-id": entry["id"], "type": entry["type"], "title": entry["fields"]["title"],
             "author-email": entry["author"]["email"], "author-sub": entry["author"]["sub"],
             "submitted-at": entry["submittedAt"], "approved-by": caller["email"], "approved-at": now(),
+            # Entries from before Herman have no origin; they came from the form.
+            "origin": entry.get("origin", "form"),
         }),
     )
     s3.delete_object(Bucket=BUCKET, Key=f"{PENDING}{entry['id']}.json")
@@ -333,6 +250,8 @@ def documents(caller, body):
             "type": info.get("type"),
             "title": info.get("title") or heading or key.rsplit("/", 1)[-1],
             "author": info.get("author-email"),
+            "authorSub": info.get("author-sub"),
+            "origin": info.get("origin"),
             "approvedBy": info.get("approved-by"),
             "approvedAt": info.get("approved-at"),
             "updatedAt": obj["LastModified"].isoformat(),
@@ -369,21 +288,6 @@ ROUTES = {
     "DELETE /kb/documents/{id}": (remove, True),
     "POST /kb/sync": (sync, True),
 }
-
-
-def parse_body(event):
-    raw = event.get("body") or ""
-    if event.get("isBase64Encoded"):
-        raw = base64.b64decode(raw).decode("utf-8")
-    if not raw:
-        return {}
-    try:
-        body = json.loads(raw)
-    except ValueError:
-        raise BadRequest("The request body must be JSON.") from None
-    if not isinstance(body, dict):
-        raise BadRequest("The request body must be a JSON object.")
-    return body
 
 
 def handler(event, context):

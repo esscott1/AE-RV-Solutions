@@ -1,0 +1,87 @@
+"""Herman, the employee assistant: POST /assistant/chat on the employee API.
+
+Herman is separate from Eddie, the public chatbot (modules/chatbot). He's
+reachable only with a signed-in employee's ID token, so he can later work
+with data customers must never reach (work orders, invoices, quotes). Each
+job is a `mode` (herman.MODES), and the server decides from the caller's
+Cognito groups which modes they get.
+
+Today's only mode, `knowledge`, interviews an employee and drafts a
+knowledge entry that teaches Eddie. Herman never writes anything. The
+employee submits the draft through POST /kb/entries (kb.py), and an admin
+approves it before it's indexed.
+
+Request:  {"mode": "knowledge", "messages": [{"role", "content"}, ...],
+           "draft": {"type", "fields"} | null,
+           "seed": {"question", "reply", "source"} | null}
+Response: {"reply", "draft": {"type", "fields"} | null, "ready", "missing": [...],
+           "reviewNote": str | null}
+
+Stateless, like Eddie: the browser sends the conversation and the current
+draft every turn. Logs the caller's ID, the mode, and token counts, never
+content.
+"""
+
+import json
+import os
+
+import boto3
+from botocore.config import Config
+from botocore.exceptions import BotoCoreError, ClientError
+
+import herman
+from claims import BadRequest, claims_of, parse_body, parse_groups, respond
+
+MODEL_ID = os.environ["MODEL_ID"]
+ROUTE = "POST /assistant/chat"
+
+# The HTTP API gives up on an integration after 30 seconds, and the function
+# after 29, so a slow reply is cut off rather than left hanging.
+bedrock = boto3.client("bedrock-runtime", config=Config(
+    connect_timeout=3, read_timeout=25, retries={"mode": "standard", "total_max_attempts": 2},
+))
+
+UNAVAILABLE = "Herman can't answer right now. Try again in a minute."
+
+
+def handler(event, context):
+    claims = claims_of(event)
+    if claims.get("token_use") != "id":
+        return respond(401, {"message": "Send the ID token."})
+    if event.get("routeKey") != ROUTE:
+        return respond(404, {"message": "Not found."})
+
+    groups = parse_groups(claims.get("cognito:groups"))
+    log = {"route": ROUTE, "sub": claims.get("sub")}
+
+    try:
+        mode, messages, draft, seed = herman.check_request(parse_body(event))
+    except BadRequest as err:
+        print(json.dumps({**log, "status": 400}))
+        return respond(400, {"message": str(err)})
+    log.update(mode=mode, turns=len(messages), seed=seed is not None)
+    if not herman.allowed(mode, groups):
+        print(json.dumps({**log, "status": 403}))
+        return respond(403, {"message": "That isn't available to your account."})
+
+    try:
+        raw = bedrock.invoke_model(
+            modelId=MODEL_ID, contentType="application/json", accept="application/json",
+            body=json.dumps(herman.build_body(mode, messages, draft, seed)),
+        )
+        response = json.loads(raw["body"].read())
+    except (ClientError, BotoCoreError) as err:
+        code = err.response["Error"]["Code"] if isinstance(err, ClientError) else type(err).__name__
+        print(json.dumps({**log, "status": 429 if code == "ThrottlingException" else 502, "error": code}))
+        return respond(429 if code == "ThrottlingException" else 502, {"message": UNAVAILABLE})
+
+    result = herman.read_turn(response)
+    new_draft = result["draft"] if result else None
+    usage = response.get("usage", {})
+    print(json.dumps({
+        **log, "status": 200, "stop": response.get("stop_reason"),
+        "in": usage.get("input_tokens"), "out": usage.get("output_tokens"),
+        "type": new_draft["type"] if new_draft else None,
+        "ready": bool(result and result["ready"]), "fallback": result is None,
+    }))
+    return respond(200, result if result is not None else herman.fallback(draft))

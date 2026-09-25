@@ -395,7 +395,7 @@ the **containers**, and the knowledge API (`modules/employees`, `kb.py`)
 manages the **content**:
 
 ```
-Add Knowledge (any employee) ─► pending/<id>.json
+Add Knowledge (any employee): the form, or a chat with Herman ─► pending/<id>.json
     │  KBValidation (admins): edit, then approve or reject (with a reason)
     ├─ reject ─► rejected/<id>.json (deleted after 30 days)
     ▼  approve
@@ -512,10 +512,80 @@ Browser ─► /employees/ (public shell)
 | Email | Cognito's built-in email (50 a day): invites and password resets only. There's no SES, because only email sign-in codes would need it |
 | Tokens | ID and access tokens last 60 minutes, and the refresh token 12 hours |
 | `admins` group | For the Admin page (Phase 2). Its members see `"isAdmin": true` from `/me` |
-| API | `GET /me` (any employee). **Admins only** (the `admins` group, checked by the function, 403 otherwise): `GET /admin/usage?days=N` (requests vs the daily quota, exchanges, conversations, routes, tokens, and estimated Bedrock cost per UTC day) and `GET /admin/conversations?days=N` (transcripts grouped by conversation ID, each with total tokens and cost), N = 1–30. The admin function's role is read-only: list/read `transcripts/` and read the chat usage plan's usage. Costs use `price_per_mtok_input`/`output` (Haiku 4.5: $1.10 / $5.50). **Knowledge** (`/kb/*`, function `ae-rv-employees-kb`): any employee can submit entries (`POST /kb/entries`), see their own (`GET /kb/entries/mine`) and view all live knowledge (`GET /kb/documents`). Admins review (`GET /kb/entries/pending`), approve with optional edits or reject with a reason (`POST /kb/entries/{id}/approve|reject`), remove (`DELETE /kb/documents/{id}`) and re-index (`POST /kb/sync`). Entries live in the documents bucket under `pending/`, `rejected/` (expire after 30 days) and `approved/`, the only prefix the data source indexes. Throttled to 2 requests a second (burst 5). CORS allows only aervsolutions.com, www, and localhost:4321 |
+| API | `GET /me` (any employee). **Admins only** (the `admins` group, checked by the function, 403 otherwise): `GET /admin/usage?days=N` (requests vs the daily quota, exchanges, conversations, routes, tokens, and estimated Bedrock cost per UTC day) and `GET /admin/conversations?days=N` (transcripts grouped by conversation ID, each with total tokens and cost), N = 1–30. The admin function's role is read-only: list/read `transcripts/` and read the chat usage plan's usage. Costs use `price_per_mtok_input`/`output` (Haiku 4.5: $1.10 / $5.50). **Knowledge** (`/kb/*`, function `ae-rv-employees-kb`): any employee can submit entries (`POST /kb/entries`), see their own (`GET /kb/entries/mine`) and view all live knowledge (`GET /kb/documents`). Admins review (`GET /kb/entries/pending`), approve with optional edits or reject with a reason (`POST /kb/entries/{id}/approve|reject`), remove (`DELETE /kb/documents/{id}`) and re-index (`POST /kb/sync`). Entries live in the documents bucket under `pending/`, `rejected/` (expire after 30 days) and `approved/`, the only prefix the data source indexes. **Herman** (`POST /assistant/chat`, function `ae-rv-employees-assistant`): any employee; see [Herman, the employee assistant](#herman-the-employee-assistant). Throttled to 2 requests a second (burst 5). CORS allows only aervsolutions.com, www, and localhost:4321 |
 
 Employee email addresses live only in the user pool, never in this public
 repo or in Terraform.
+
+### Herman, the employee assistant
+
+Herman is a chat assistant for employees only. He is separate from Eddie,
+the public chatbot. His first job is teaching Eddie: he interviews an
+employee, asks the right questions for the kind of knowledge (capability,
+FAQ or note), and drafts the entry.
+
+```
+Employee (signed in) ─► POST /assistant/chat  {mode: "knowledge", messages, draft, seed?}
+    HTTP API ─ JWT authorizer ─► Lambda ae-rv-employees-assistant ─► Bedrock (Claude Haiku 4.5)
+    ◄─ {reply, draft, ready, missing, reviewNote}
+Employee clicks "Submit for review" ─► POST /kb/entries {type, fields, origin: "chat", reviewNote}
+    ─► pending/<id>.json ─► KBValidation (admins) ─► approved/ ─► Eddie
+```
+
+- **Why he's separate from Eddie.** Eddie's API is public: no sign-in, and
+  its key ships in the site. Herman will later work with work orders,
+  invoices and quotes, so he lives on the employee API. A request without a
+  valid employee ID token is rejected with a 401 before any code runs.
+  Herman and Eddie share the model, but no prompts or code.
+- **He only drafts.**
+  - His role can call the model and write his own logs, and nothing else.
+    He has no access to the documents bucket.
+  - The employee submits the draft through the same `POST /kb/entries` as
+    the form. An admin still approves every entry before Eddie sees it.
+  - `ready` is decided by the function, not the model: the draft must pass
+    the same checks `POST /kb/entries` applies (`knowledge_fields.py`).
+- **Who wrote it.** Every entry records its author (Cognito `sub` and
+  email) from the verified token, never from the request, so neither Herman
+  nor the browser can set it. Approval copies it into the published file's
+  S3 metadata (`author-sub`, `author-email`), along with `origin` (`form`
+  or `chat`).
+  - None of this goes into the Markdown, which is what Eddie reads.
+  - `reviewNote` is Herman's flag for the reviewer (hazardous work, prices,
+    customer details). It's advisory: it travels through the browser, so an
+    employee could remove it. The reviewer still reads the entry itself.
+- **Coming from Eddie.** A `seed` carries a customer question, Eddie's reply
+  and its `source` from a chat with Eddie. Herman starts the interview from
+  that gap, and treats the seeded text as data, never instructions.
+- **Modes.** Each of Herman's jobs is a `mode` in `lambda/herman.py`, with its
+  own prompt, tool, and allowed Cognito groups. The function checks the
+  groups, never the model. `knowledge` is open to every employee. Future
+  modes add their own tools and IAM statements.
+- **Stateless.** Like Eddie, Herman keeps no conversation: the browser sends
+  the conversation (up to 40 messages) and the current draft on every turn.
+  Each call logs the caller's `sub`, the mode, and token counts, never
+  content.
+- **Cost.** About half a cent per turn (Haiku). The API's shared throttle is
+  2 requests a second.
+
+**Prompts and tuning.** Herman's prompts are in
+`aws/modules/employees/lambda/prompts/`:
+- `herman_personality.md`: his own personality, separate from Eddie's.
+- `intake.md`: the knowledge-mode rules.
+
+Changing them never affects Eddie, so the chatbot's safety eval doesn't need
+a rerun. Eddie's personality (`modules/chatbot/prompts/personality.md`) stays
+Eddie's alone.
+
+After changing Herman's prompts, or `herman.py`, run his eval. It plays
+scripted employee conversations through the Lambda's own code with the
+**local** prompts, and flags invented numbers, wrong kinds, missing reviewer
+notes, prompt leaks and injection:
+
+```bash
+cd infrastructure/aws/modules/employees/eval
+AWS_PROFILE=OTS-Prod-Deploy python intake_eval.py            # all cases, about $0.15
+AWS_PROFILE=OTS-Prod-Deploy python intake_eval.py identity   # one case
+```
 
 ### Runbook
 

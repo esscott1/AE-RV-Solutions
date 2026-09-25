@@ -47,3 +47,13 @@ output "api_key_id" {
   description = "ID (not the value) of the site's chat API key."
   value       = aws_api_gateway_api_key.site.id
 }
+
+output "inference_profile_arn" {
+  description = "The Bedrock inference profile the chatbot calls (Claude Haiku 4.5). Herman (modules/employees) uses it too."
+  value       = local.inference_profile_arn
+}
+
+output "model_invoke_arns" {
+  description = "Everything IAM must allow to invoke through the inference profile: the profile and its foundation model in every region it routes to."
+  value       = concat([local.inference_profile_arn], local.foundation_model_arns)
+}
