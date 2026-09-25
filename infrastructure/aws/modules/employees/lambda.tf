@@ -165,3 +165,95 @@ resource "aws_lambda_permission" "admin" {
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.employees.execution_arn}/*/GET/admin/*"
 }
+
+# --- /kb/* (knowledge administration) ---------------------------------------------
+
+data "aws_caller_identity" "current" {}
+
+resource "aws_iam_role" "kb" {
+  name               = "${var.name_prefix}-kb"
+  assume_role_policy = data.aws_iam_policy_document.lambda_trust.json
+  tags               = var.tags
+}
+
+# The documents bucket's pending/, rejected/ and approved/ prefixes, and the
+# knowledge base's ingestion jobs, and nothing else.
+data "aws_iam_policy_document" "kb" {
+  statement {
+    sid       = "Logs"
+    actions   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+    resources = ["${aws_cloudwatch_log_group.kb.arn}:*"]
+  }
+
+  statement {
+    sid       = "ListKnowledge"
+    actions   = ["s3:ListBucket"]
+    resources = ["arn:aws:s3:::${var.kb_docs_bucket}"]
+
+    condition {
+      test     = "StringLike"
+      variable = "s3:prefix"
+      values   = ["pending/*", "rejected/*", "approved/*"]
+    }
+  }
+
+  statement {
+    sid     = "ManageKnowledge"
+    actions = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+    resources = [
+      "arn:aws:s3:::${var.kb_docs_bucket}/pending/*",
+      "arn:aws:s3:::${var.kb_docs_bucket}/rejected/*",
+      "arn:aws:s3:::${var.kb_docs_bucket}/approved/*",
+    ]
+  }
+
+  statement {
+    sid       = "IndexKnowledge"
+    actions   = ["bedrock:StartIngestionJob", "bedrock:GetIngestionJob", "bedrock:ListIngestionJobs"]
+    resources = ["arn:aws:bedrock:${local.region}:${data.aws_caller_identity.current.account_id}:knowledge-base/${var.knowledge_base_id}"]
+  }
+}
+
+resource "aws_iam_role_policy" "kb" {
+  name   = "knowledge"
+  role   = aws_iam_role.kb.id
+  policy = data.aws_iam_policy_document.kb.json
+}
+
+resource "aws_cloudwatch_log_group" "kb" {
+  name              = "/aws/lambda/${var.name_prefix}-kb"
+  retention_in_days = 30
+  tags              = var.tags
+}
+
+resource "aws_lambda_function" "kb" {
+  function_name    = "${var.name_prefix}-kb"
+  description      = "/kb/* on the employee API: submit, review, publish, view and remove knowledge-base entries."
+  role             = aws_iam_role.kb.arn
+  runtime          = "python3.13"
+  architectures    = ["arm64"]
+  handler          = "kb.handler"
+  filename         = data.archive_file.lambda.output_path
+  source_code_hash = data.archive_file.lambda.output_base64sha256
+  memory_size      = 256
+  timeout          = 30
+  tags             = var.tags
+
+  environment {
+    variables = {
+      KB_DOCS_BUCKET    = var.kb_docs_bucket
+      KNOWLEDGE_BASE_ID = var.knowledge_base_id
+      KB_DATA_SOURCE_ID = var.kb_data_source_id
+    }
+  }
+
+  depends_on = [aws_cloudwatch_log_group.kb, aws_iam_role_policy.kb]
+}
+
+resource "aws_lambda_permission" "kb" {
+  statement_id  = "AllowEmployeeApi"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.kb.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.employees.execution_arn}/*/*/kb/*"
+}

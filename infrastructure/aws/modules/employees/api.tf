@@ -11,8 +11,8 @@ resource "aws_apigatewayv2_api" "employees" {
 
   cors_configuration {
     allow_origins = var.site_origins
-    allow_methods = ["GET"]
-    allow_headers = ["authorization"]
+    allow_methods = ["GET", "POST", "DELETE"]
+    allow_headers = ["authorization", "content-type"]
     max_age       = 3600
   }
 
@@ -62,6 +62,34 @@ resource "aws_apigatewayv2_route" "admin" {
   api_id             = aws_apigatewayv2_api.employees.id
   route_key          = each.key
   target             = "integrations/${aws_apigatewayv2_integration.admin.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+# Knowledge administration. Admin-only routes are enforced by the function
+# (the admins group), like /admin/*.
+resource "aws_apigatewayv2_integration" "kb" {
+  api_id                 = aws_apigatewayv2_api.employees.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.kb.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "kb" {
+  for_each = toset([
+    "POST /kb/entries",
+    "GET /kb/entries/mine",
+    "GET /kb/entries/pending",
+    "POST /kb/entries/{id}/approve",
+    "POST /kb/entries/{id}/reject",
+    "GET /kb/documents",
+    "DELETE /kb/documents/{id}",
+    "POST /kb/sync",
+  ])
+
+  api_id             = aws_apigatewayv2_api.employees.id
+  route_key          = each.key
+  target             = "integrations/${aws_apigatewayv2_integration.kb.id}"
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
