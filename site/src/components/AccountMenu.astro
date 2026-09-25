@@ -10,6 +10,9 @@
 // auth.js does (clear it, then Cognito's logout page).
 const pages = [
   { href: '/employees/', label: "Employees' Space" },
+  { href: '/add-knowledge/', label: 'Add Knowledge' },
+  { href: '/kb-viewer/', label: 'KBViewer' },
+  { href: '/kb-validation/', label: 'KBValidation', requires: 'admins' },
   { href: '/ai-stats/', label: 'AI Stats', requires: 'admins' },
 ];
 ---

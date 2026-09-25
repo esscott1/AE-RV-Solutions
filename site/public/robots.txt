@@ -30,8 +30,11 @@ Disallow: /
 User-agent: Bytespider
 Disallow: /
 
-# The employee and AI Stats pages have nothing public worth indexing.
+# The employee-only pages have nothing public worth indexing.
 User-agent: *
 Allow: /
 Disallow: /employees/
 Disallow: /ai-stats/
+Disallow: /add-knowledge/
+Disallow: /kb-validation/
+Disallow: /kb-viewer/
