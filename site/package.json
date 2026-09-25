@@ -15,6 +15,7 @@
   "dependencies": {
     "@astrojs/react": "^6.0.5",
     "astro": "^7.3.2",
+    "fflate": "^0.8.3",
     "oidc-client-ts": "^3.5.0",
     "qrcode": "^1.5.4",
     "react": "^19.3.0",

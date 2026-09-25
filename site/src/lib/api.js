@@ -190,3 +190,43 @@ export function getAdminUsage(idToken, days) {
 export function getAdminConversations(idToken, days) {
   return getAdmin(`admin/conversations?days=${days}`, idToken);
 }
+
+// Knowledge API (/kb/*). Every call returns {status: 'ok', data},
+// {status: 'invalid', message} (the server's 400 reason, e.g. a missing
+// field), {status: 'forbidden'}, {status: 'unauthorized'}, or
+// {status: 'error'}. Fails closed.
+async function knowledgeCall(method, path, idToken, body) {
+  if (!EMPLOYEE_API_URL || !idToken) return { status: 'unauthorized' };
+  try {
+    const res = await fetch(new URL(path, EMPLOYEE_API_URL), {
+      method,
+      headers: {
+        Authorization: `Bearer ${idToken}`,
+        ...(body ? { 'Content-Type': 'application/json' } : {}),
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) return { status: 'ok', data };
+    if (res.status === 400) return { status: 'invalid', message: data.message || 'Please check the form.' };
+    if (res.status === 401) return { status: 'unauthorized' };
+    if (res.status === 403) return { status: 'forbidden' };
+    return { status: 'error' };
+  } catch {
+    return { status: 'error' };
+  }
+}
+
+export const submitKnowledge = (idToken, type, fields) =>
+  knowledgeCall('POST', 'kb/entries', idToken, { type, fields });
+export const getMyKnowledge = (idToken) => knowledgeCall('GET', 'kb/entries/mine', idToken);
+export const getPendingKnowledge = (idToken) => knowledgeCall('GET', 'kb/entries/pending', idToken);
+// `fields` is optional: pass edited fields to publish the admin's version.
+export const approveKnowledge = (idToken, id, fields) =>
+  knowledgeCall('POST', `kb/entries/${encodeURIComponent(id)}/approve`, idToken, fields ? { fields } : {});
+export const rejectKnowledge = (idToken, id, reason) =>
+  knowledgeCall('POST', `kb/entries/${encodeURIComponent(id)}/reject`, idToken, { reason });
+export const getKnowledgeDocuments = (idToken) => knowledgeCall('GET', 'kb/documents', idToken);
+export const removeKnowledge = (idToken, id) =>
+  knowledgeCall('DELETE', `kb/documents/${encodeURIComponent(id)}`, idToken);
+export const reindexKnowledge = (idToken) => knowledgeCall('POST', 'kb/sync', idToken, {});
