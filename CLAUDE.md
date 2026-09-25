@@ -24,12 +24,11 @@ Domain: aervsolutions.com (registered with GoDaddy, DNS pointing to AWS Amplify)
 - Chat backend: API Gateway (REST) → Step Functions (Express) → Bedrock.
   Knowledge base: Bedrock Knowledge Base on S3 Vectors with Titan Text
   Embeddings V2 (`modules/chatbot/kb.tf`). Terraform owns the containers;
-  the content lives in the top-level `knowledge-base/` folder (the owner
-  chose to keep it in this public repo; it is publicly readable). Merging a
-  change there runs the "Chatbot knowledge base sync" workflow, which
-  mirrors the folder into the private `ae-rv-chatbot-kb-docs-*` bucket
-  (`--delete`) and re-indexes it. Templates live outside that folder
-  (`modules/chatbot/kb-templates/`) so they're never indexed
+  the content is managed only on the website (Add Knowledge → KBValidation
+  → KBViewer) through the knowledge API (`modules/employees`, `kb.py`), and
+  lives in the private `ae-rv-chatbot-kb-docs-*` bucket. The data source
+  indexes only `approved/`. Knowledge never goes in this repo (the old
+  `knowledge-base/` folder and its sync workflow were retired 2026-09-24)
 - Employee sign-in: Cognito user pool (Essentials, passwords + passkeys,
   admin-created accounts only) → HTTP API with a JWT authorizer → Lambda
   (`modules/employees/`). Protected content comes only from that API, never

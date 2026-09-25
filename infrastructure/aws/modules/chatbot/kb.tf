@@ -1,14 +1,14 @@
 # --- Knowledge base (v2) -----------------------------------------------------
 #
-# The owner's own FAQs, notes, capability pages, and diagram descriptions
-# live in a private S3 bucket. They're never in this public repo. A "sync"
-# (chatbot-kb-sync.yml, or Sync in the Bedrock console) chunks them, embeds
-# them with Titan Text Embeddings V2, and stores the vectors in S3 Vectors.
-# The chatbot's Answer step retrieves the few most relevant passages per
-# question.
+# Knowledge is written by employees on the website and approved by admins
+# (the knowledge API in modules/employees, kb.py). It lives in a private S3
+# bucket and is never in this public repo. Indexing (started by the API on
+# approve and remove) chunks approved/ files, embeds them with Titan Text
+# Embeddings V2, and stores the vectors in S3 Vectors. The chatbot's Answer
+# step retrieves the few most relevant passages per question.
 #
 # Terraform owns the containers (bucket, vector store, knowledge base), not
-# the content. Uploading or changing documents needs no PR or deploy.
+# the content.
 
 locals {
   kb_docs_bucket_name = "${var.name_prefix}-kb-docs-${local.account_id}"

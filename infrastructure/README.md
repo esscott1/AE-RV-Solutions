@@ -56,7 +56,6 @@ workflow switches the chatbot on or off:
 | `terraform-aws.yml` | `infrastructure/aws/live/**`, `infrastructure/aws/modules/**` (on merged PR) | Runs `terraform apply` against AWS, authenticated via OIDC (no stored keys) |
 | `deploy-site.yml` | `site/**` | Reads [`deploy-targets.yml`](deploy-targets.yml), then deploys to each cloud whose flag is `true` |
 | `chatbot-toggle.yml` | Manual: Actions → "Chatbot on/off" → Run workflow | Sets the chatbot's on/off flag. Takes effect in seconds; no PR or deploy (see [Chatbot](#chatbot)) |
-| `chatbot-kb-sync.yml` | `knowledge-base/**` (on merge to `main`), or manually from Actions → "Chatbot knowledge base sync" | Mirrors `knowledge-base/` into the knowledge base's S3 bucket and re-indexes it; reports indexed and failed counts (see [Knowledge base](#knowledge-base)) |
 
 `infrastructure/aws/bootstrap/**` deliberately isn't in `terraform-aws.yml`'s
 path filter — `bootstrap` stays a local, one-time step (see below), since
@@ -390,76 +389,84 @@ judge. It costs about $0.005 per case. The cases are in
 
 ## Knowledge base
 
-The chatbot's knowledge comes from the owner's own FAQs, notes,
-"capability" pages, and descriptions of diagrams, kept in the top-level
-[`knowledge-base/`](../knowledge-base) folder. Terraform
-([`aws/modules/chatbot/kb.tf`](aws/modules/chatbot/kb.tf)) creates the
-**containers**; **merging a change to that folder publishes it**:
+Eddie's knowledge is written by employees on the website, not in this repo.
+Terraform ([`aws/modules/chatbot/kb.tf`](aws/modules/chatbot/kb.tf)) creates
+the **containers**, and the knowledge API (`modules/employees`, `kb.py`)
+manages the **content**:
 
 ```
-knowledge-base/ ─merge to main─► chatbot-kb-sync.yml
-    │  aws s3 sync --delete (exact mirror)
+Add Knowledge (any employee) ─► pending/<id>.json
+    │  KBValidation (admins): edit, then approve or reject (with a reason)
+    ├─ reject ─► rejected/<id>.json (deleted after 30 days)
+    ▼  approve
+approved/<type>/<slug>-<id>.md  in  ae-rv-chatbot-kb-docs-<account> (private, versioned)
+    │  indexing job (started automatically on approve and remove)
     ▼
-S3 bucket ae-rv-chatbot-kb-docs-<account> (private, versioned)
-    │  Bedrock ingestion job
-    ▼
-split into ~300-token passages ─► Titan Text Embeddings V2 ─► S3 Vectors index
+~300-token passages ─► Titan Text Embeddings V2 ─► S3 Vectors index
     │
 Chat question ─► Retrieve the most relevant passages ─► the Answer step uses them
 ```
 
-**Behavior vs. knowledge:** both are in the repo, reviewed in PRs, and
-published by merging. They differ in what a change needs:
-- **How the bot talks** (personality, safety rules, the "one more
-  capability" rule) lives in `modules/chatbot/prompts/`. It deploys through
-  Terraform, and a change needs the safety eval.
-- **What it knows** lives in `knowledge-base/`. It deploys through the sync
-  workflow in a couple of minutes, with no Terraform involved.
+- **Only `approved/` is indexed.** The data source's `inclusion_prefixes`
+  make that structural: drafts and rejections are never read.
+- **Who can do what.** "Admin" means an employee in the Cognito `admins`
+  group.
+  - Any employee can submit, see their own submissions, and view or
+    download everything on **KBViewer**.
+  - Admins review on **KBValidation**, and can remove or re-index on
+    KBViewer.
+- **Behavior vs. knowledge:**
+  - How Eddie talks (personality, safety rules, the "one more capability"
+    rule) lives in `modules/chatbot/prompts/`. It deploys through Terraform,
+    and a change needs the safety eval.
+  - What he knows is managed on the site, takes effect a minute or two after
+    approval, and involves no PR or deploy.
+- **Never upload to the bucket by hand.** Use the site, so every file has
+  the structure Eddie's prompts rely on.
+- **The repo history** still contains the knowledge that lived in the old
+  public `knowledge-base/` folder (removed 2026-09-24). New knowledge is
+  never public.
 
-**Public repo:** the owner chose to keep the content here, so it's publicly
-readable on GitHub. The chatbot's anti-distillation controls still limit
-automated use of the chatbot (the quota, the decline route, short answers),
-but they don't make the content secret.
+### The three kinds of knowledge
 
-### What to write, and in what format
+The Add Knowledge page builds the Markdown from a guided form:
 
-| Content | Format | Folder in `knowledge-base/` |
+| Kind | Use it for | Markdown written |
 |---|---|---|
-| FAQs | Markdown (`.md`): `## Q: …` then the answer, many per file | `faq/` |
-| "How do I…" capabilities | Markdown, one per file, **including one "Also possible with this setup" pairing** | `capabilities/` |
-| Notes | Markdown with `#`/`##` headings (`.txt`, `.docx`, and `.pdf` also work) | `notes/` |
-| Diagrams | The diagram file **plus a `.md` description beside it, with the same name** | `diagrams/` |
+| **Capability** | Something a customer can **do** with their RV, and what it takes | `# Capability: <title>`, then `## What it takes: <title>`, `## How A&E sets it up: <title>`, `## Also possible with this setup: <title>` |
+| **FAQ** | Short questions customers ask, with short answers | `# Frequently asked questions: <topic>`, then `## Q: …` per question |
+| **Note** | Rules of thumb, service tips, lessons learned | `# <title>`, then `## <title>: <heading>` per section |
 
-- Templates live in [`aws/modules/chatbot/kb-templates/`](aws/modules/chatbot/kb-templates),
-  outside `knowledge-base/`, so they're never indexed.
-- Markdown is plain text with `#` headings; any editor, even Notepad, works.
-- Diagrams need the description because the knowledge base searches text.
-  It can't interpret a picture.
-- `README.md` files are never uploaded.
+- **Bedrock doesn't know the kinds.** Retrieval ranks passages by meaning.
+- **The structure is what matters:**
+  - `## Q:` headings match how customers phrase questions.
+  - Eddie takes his single "You could also…" idea **only** from a section
+    named "Also possible with this setup".
+  - Every heading carries the topic, so a passage cut from the middle of a
+    file still says what it's about.
 
-### Step by step
+**Writing tips** (also shown on the form):
+- One topic per heading, in plain customer language.
+- Put numbers in (watts, amp-hours, runtimes) with the conditions they
+  depend on.
+- **No step-by-step wiring or battery procedures.** Eddie won't give them
+  anyway. Describe *what* is needed and *why*, and leave the *how* to a
+  technician.
+- No customer details, and no prices you don't want quoted.
 
-1. **Add or edit files** under `knowledge-base/` on a branch, and open a PR.
-   Neither the site build nor the Terraform plan runs for this folder, so
-   the checks finish in seconds.
-2. **Merge** (owner's OK). The **Chatbot knowledge base sync** workflow runs
-   automatically. After a minute or two, its summary shows how many
-   documents were indexed, updated, removed, or failed.
-3. **Check what it finds, without using the chatbot** (AWS console,
-   us-west-2):
-   1. **Bedrock → Knowledge Bases → `ae-rv-chatbot-kb` → Test knowledge
-      base**.
-   2. Turn **off** "Generate responses", so it only retrieves; that's
-      almost free.
-   3. Ask a real customer question. The passages shown are what the chatbot
-      would get.
-4. **Re-sync without a change** (e.g. after a failed run): Actions →
-   **Chatbot knowledge base sync** → Run workflow.
+### Removing, restoring, and checking knowledge
 
-**Don't upload to the S3 bucket by hand.** The sync mirrors `knowledge-base/`
-exactly, so hand-uploaded files are deleted on the next run. The bucket is
-versioned, so anything removed by mistake can still be recovered (**Show
-versions** in the S3 console).
+- **Remove:** KBViewer → Remove (admins). Indexing runs automatically.
+- **Restore:** the bucket is versioned, and earlier versions are kept for a
+  year. In the S3 console, turn on **Show versions** for the file, delete
+  its delete marker, then KBViewer → Re-index.
+- **Back up:** KBViewer → Download all (.zip).
+- **Check what Eddie will find**, without using the chatbot (AWS console,
+  us-west-2):
+  1. Go to Bedrock → Knowledge Bases → `ae-rv-chatbot-kb` → Test knowledge
+     base.
+  2. Turn **off** "Generate responses".
+  3. Ask a real customer question.
 
 ### Costs
 
@@ -474,9 +481,11 @@ versions** in the S3 console).
   - private (public access blocked)
   - encrypted and versioned
   - `prevent_destroy`, because it holds the owner's own writing
-- **The vector store** is derived data: a sync rebuilds it from the bucket.
-- **The sync role** can only write that one bucket and start and watch
-  ingestion jobs.
+- **The vector store** is derived data: indexing rebuilds it from the
+  bucket.
+- **The knowledge API's role** can only touch the bucket's `pending/`,
+  `rejected/`, and `approved/` prefixes and start or watch this knowledge
+  base's indexing jobs.
 - **The knowledge base's role** can only read the bucket, call Titan, and use
   its own index.
 
@@ -620,16 +629,14 @@ here on.
    policy is scoped to — only a job that declares
    `environment: aws-infra` can assume it. Optionally add a required
    reviewer here for a manual approval gate before `terraform apply` runs.
-   Also create `chatbot-toggle` and `chatbot-kb-sync`, which the chatbot
-   toggle and knowledge-base sync roles are scoped to the same way.
+   Also create `chatbot-toggle`, which the chatbot toggle role is scoped to
+   the same way.
 5. **Add a repo variable** (Settings → Secrets and variables → Actions →
    Variables) named `AWS_TERRAFORM_ROLE_ARN`, set to the
    `github_actions_role_arn` output from step 2, and one named
    `AWS_TERRAFORM_PLAN_ROLE_ARN`, set to the `github_actions_plan_role_arn`
-   output, one named `AWS_CHATBOT_TOGGLE_ROLE_ARN`, set to the
-   `github_actions_chatbot_toggle_role_arn` output, and one named
-   `AWS_CHATBOT_KB_SYNC_ROLE_ARN`, set to the
-   `github_actions_chatbot_kb_sync_role_arn` output.
+   output, and one named `AWS_CHATBOT_TOGGLE_ROLE_ARN`, set to the
+   `github_actions_chatbot_toggle_role_arn` output.
 6. **Generate a GitHub token for Amplify** and add it as a repo secret.
    Confirmed by a real `terraform apply` failure (`BadRequestException:
    You should at least provide one valid token`): the Amplify `CreateApp`
