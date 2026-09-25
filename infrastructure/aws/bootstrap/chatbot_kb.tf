@@ -1,5 +1,7 @@
-# --- Chatbot knowledge base (modules/chatbot/kb.tf): CI permissions and the
-# "sync" role. ---
+# --- Chatbot knowledge base (modules/chatbot/kb.tf): CI permissions. ---
+#
+# (The repo-to-bucket sync role was removed on 2026-09-24: knowledge is now
+# managed on the website, through modules/employees' knowledge API.)
 #
 # Same rules as chatbot.tf: scoped to the ae-rv-chatbot prefix where the
 # service allows it, and when a CI plan or apply hits an AccessDenied, add
@@ -116,86 +118,4 @@ resource "aws_iam_role_policy" "github_actions_terraform_plan_chatbot_kb" {
   name   = "terraform-plan-chatbot-kb"
   role   = aws_iam_role.github_actions_terraform_plan.id
   policy = data.aws_iam_policy_document.github_actions_terraform_plan_chatbot_kb.json
-}
-
-# --- Publish role: chatbot-kb-sync.yml mirrors knowledge-base/ into the
-# documents bucket and re-indexes it. ---
-
-data "aws_iam_policy_document" "github_actions_chatbot_kb_sync_trust" {
-  statement {
-    effect  = "Allow"
-    actions = ["sts:AssumeRoleWithWebIdentity"]
-
-    principals {
-      type        = "Federated"
-      identifiers = [aws_iam_openid_connect_provider.github_actions.arn]
-    }
-
-    condition {
-      test     = "StringEquals"
-      variable = "token.actions.githubusercontent.com:aud"
-      values   = ["sts.amazonaws.com"]
-    }
-
-    # Only jobs in the chatbot-kb-sync GitHub Environment, with the same
-    # immutable-ID wildcards as the other roles.
-    condition {
-      test     = "StringLike"
-      variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${split("/", var.github_repository)[0]}*/${split("/", var.github_repository)[1]}*:environment:${var.chatbot_kb_sync_environment}"]
-    }
-  }
-}
-
-resource "aws_iam_role" "github_actions_chatbot_kb_sync" {
-  name               = "github-actions-chatbot-kb-sync"
-  assume_role_policy = data.aws_iam_policy_document.github_actions_chatbot_kb_sync_trust.json
-}
-
-# Start and watch ingestion jobs, and mirror files into the documents bucket
-# (below). It can't change the knowledge base's settings or reach anything
-# else.
-data "aws_iam_policy_document" "github_actions_chatbot_kb_sync" {
-  statement {
-    sid    = "SyncKnowledgeBase"
-    effect = "Allow"
-    actions = [
-      "bedrock:StartIngestionJob",
-      "bedrock:GetIngestionJob",
-      "bedrock:ListIngestionJobs",
-      "bedrock:ListDataSources",
-    ]
-    resources = [local.kb_arn]
-  }
-
-  # List* calls that AWS authorizes only on "*".
-  statement {
-    sid       = "FindKnowledgeBase"
-    effect    = "Allow"
-    actions   = ["bedrock:ListKnowledgeBases"]
-    resources = ["*"]
-  }
-
-  # The workflow mirrors the repo's knowledge-base/ folder into the documents
-  # bucket (aws s3 sync --delete), which makes the repo the source of truth.
-  # Scoped to that bucket and its objects.
-  statement {
-    sid       = "MirrorDocumentsBucket"
-    effect    = "Allow"
-    actions   = ["s3:ListBucket"]
-    resources = [local.kb_docs_bucket_arn]
-  }
-
-  statement {
-    sid       = "MirrorDocumentObjects"
-    effect    = "Allow"
-    actions   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
-    resources = ["${local.kb_docs_bucket_arn}/*"]
-  }
-}
-
-resource "aws_iam_role_policy" "github_actions_chatbot_kb_sync" {
-  name   = "chatbot-kb-sync"
-  role   = aws_iam_role.github_actions_chatbot_kb_sync.id
-  policy = data.aws_iam_policy_document.github_actions_chatbot_kb_sync.json
 }

@@ -63,11 +63,6 @@ variable "monthly_budget_usd" {
   default     = 20
 }
 
-variable "chatbot_kb_sync_environment" {
-  description = "GitHub Environment whose jobs may assume the knowledge-base sync role (used by chatbot-kb-sync.yml)."
-  type        = string
-  default     = "chatbot-kb-sync"
-}
 
 variable "employees_name_prefix" {
   description = "Name prefix every employee sign-in resource uses (Lambda functions, IAM roles, log groups, the HTTP API). The CI roles' employee permissions are scoped to it, so it must match modules/employees' name_prefix."
