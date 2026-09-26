@@ -47,6 +47,16 @@
   overflow: hidden;
 }
 
+/* The expand button's larger window: most of the screen, for longer
+   conversations (Herman's tab opens this way). The message list grows to
+   fill it. */
+.chat-widget__panel--expanded {
+  width: min(760px, calc(100vw - 2.5rem));
+  height: calc(100vh - 7rem);
+  height: calc(100dvh - 7rem);
+  max-height: none;
+}
+
 .chat-widget__header {
   display: flex;
   align-items: center;
@@ -109,6 +119,11 @@
   min-height: 32px;
   font-size: 1.5rem;
   line-height: 1;
+}
+
+/* The expand button: the close button's shape, a smaller glyph. */
+.chat-widget__close.chat-widget__size {
+  font-size: 1.15rem;
 }
 
 .chat-widget__text-button:disabled {
@@ -320,5 +335,10 @@
   .chat-widget__panel {
     width: 100%;
     max-height: calc(100vh - 6rem);
+  }
+
+  .chat-widget__panel--expanded {
+    height: calc(100vh - 6rem);
+    height: calc(100dvh - 6rem);
   }
 }

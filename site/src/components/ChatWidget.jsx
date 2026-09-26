@@ -17,6 +17,8 @@ const COUNTER_FROM = 400;
 
 const STORAGE_KEY = 'ae-rv-chat';
 const CONVERSATION_ID_KEY = 'ae-rv-chat-id';
+// The window size the visitor last picked with the expand button, if any.
+const SIZE_KEY = 'ae-rv-chat-size';
 const OFFLINE_TEXT = 'Chat is offline right now. Please contact us directly.';
 const NOTICE_TEXT =
   'AI assistant. For electrical or battery hazards, contact a technician. Automated or bulk access is not permitted.';
@@ -90,6 +92,23 @@ function saveConversationId(id) {
   }
 }
 
+function loadSize() {
+  try {
+    const saved = sessionStorage.getItem(SIZE_KEY);
+    return saved === 'expanded' || saved === 'compact' ? saved : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveSize(size) {
+  try {
+    if (size) sessionStorage.setItem(SIZE_KEY, size);
+  } catch {
+    // Storage blocked: the size just resets on the next page.
+  }
+}
+
 function saveConversation(messages) {
   try {
     if (messages.length > 0) sessionStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
@@ -117,6 +136,9 @@ export default function ChatWidget() {
   const [tab, setTab] = useState('eddie'); // eddie | herman (employees only)
   // An Eddie exchange handed to Herman by "Teach Eddie about this".
   const [teachSeed, setTeachSeed] = useState(null);
+  // null until the visitor uses the expand button. Until then, Herman's tab
+  // opens large (his drafts need the room) and Eddie's stays compact.
+  const [size, setSize] = useState(loadSize);
 
   const panelId = useId();
   const launcherRef = useRef(null);
@@ -131,6 +153,10 @@ export default function ChatWidget() {
   useEffect(() => {
     saveConversationId(conversationId);
   }, [conversationId]);
+
+  useEffect(() => {
+    saveSize(size);
+  }, [size]);
 
   // Keep the newest message (or the typing indicator) in view.
   useEffect(() => {
@@ -195,13 +221,14 @@ export default function ChatWidget() {
   }
 
   const eddieTab = tab === 'eddie';
+  const expanded = size ? size === 'expanded' : !eddieTab;
 
   return (
     <div className="chat-widget">
       {open && (
         <div
           id={panelId}
-          className="chat-widget__panel"
+          className={`chat-widget__panel${expanded ? ' chat-widget__panel--expanded' : ''}`}
           role="dialog"
           aria-label="A&E RV Solutions assistant"
           onKeyDown={onPanelKeyDown}
@@ -241,6 +268,16 @@ export default function ChatWidget() {
                 Start over
               </button>
             )}
+            <button
+              type="button"
+              className="chat-widget__close chat-widget__size"
+              onClick={() => setSize(expanded ? 'compact' : 'expanded')}
+              aria-label={expanded ? 'Make the chat window smaller' : 'Make the chat window larger'}
+              aria-pressed={expanded}
+              title={expanded ? 'Smaller' : 'Larger'}
+            >
+              <span aria-hidden="true">{expanded ? '⤡' : '⤢'}</span>
+            </button>
             <button
               type="button"
               ref={closeRef}
