@@ -251,7 +251,7 @@ one-time model-access use-case form, submitted in the Bedrock console.
 
 ### Turning it on or off
 
-- **Normally:** the **Features** admin page on the site (admins only). It
+- **Normally:** the **Feature Mgr** admin page on the site (admins only). It
   calls `POST /admin/features/eddie` on the employee API. It shows each
   switch's recent changes and who made them.
 - **Backup:** the Actions tab → **Chatbot on/off** → Run workflow → `on` or
@@ -263,10 +263,13 @@ one-time model-access use-case form, submitted in the Bedrock console.
 
 All three flip the same parameter, so they never disagree.
 
+Herman has his own switch on the same page. See [Herman, the employee
+assistant](#herman-the-employee-assistant).
+
 **Who changed it** comes from the parameter's own version history (the last
-100 versions), which the Features page shows:
+100 versions), which the Feature Mgr page shows:
 - **Page changes:** the version's description names the admin ("Off: set on
-  the Features page by …"), and the admin function logs one line with the
+  the Feature Mgr page by …"), and the admin function logs one line with the
   admin's user ID.
 - **Workflow changes:** attributed to the workflow's role. Its run history
   shows who ran it.
@@ -536,7 +539,7 @@ Browser ─► /employees/ (public shell)
 | Email | Cognito's built-in email (50 a day): invites and password resets only. There's no SES, because only email sign-in codes would need it |
 | Tokens | ID and access tokens last 60 minutes, and the refresh token 12 hours |
 | `admins` group | For the Admin page (Phase 2). Its members see `"isAdmin": true` from `/me` |
-| API | `GET /me` (any employee). **Admins only** (the `admins` group, checked by the function, 403 otherwise): `GET /admin/usage?days=N` (requests vs the daily quota, exchanges, conversations, routes, tokens, and estimated Bedrock cost per UTC day) and `GET /admin/conversations?days=N` (transcripts grouped by conversation ID, each with total tokens and cost), N = 1–30; `GET /admin/features` (each feature switch with its recent changes) and `POST /admin/features/{name}` `{"enabled": true\|false}` (the Features page; see [Turning it on or off](#turning-it-on-or-off)). The admin function's role can list/read `transcripts/`, read the chat usage plan's usage, and read and overwrite only the parameters in `feature_flags`. Costs use `price_per_mtok_input`/`output` (Haiku 4.5: $1.10 / $5.50). **Knowledge** (`/kb/*`, function `ae-rv-employees-kb`): any employee can submit entries (`POST /kb/entries`), see their own (`GET /kb/entries/mine`) and view all live knowledge (`GET /kb/documents`). Admins review (`GET /kb/entries/pending`), approve with optional edits or reject with a reason (`POST /kb/entries/{id}/approve|reject`), remove (`DELETE /kb/documents/{id}`) and re-index (`POST /kb/sync`). Entries live in the documents bucket under `pending/`, `rejected/` (expire after 30 days) and `approved/`, the only prefix the data source indexes. **Herman** (`POST /assistant/chat`, function `ae-rv-employees-assistant`): any employee; see [Herman, the employee assistant](#herman-the-employee-assistant). Throttled to 2 requests a second (burst 5). CORS allows only aervsolutions.com, www, and localhost:4321 |
+| API | `GET /me` (any employee). **Admins only** (the `admins` group, checked by the function, 403 otherwise): `GET /admin/usage?days=N` (requests vs the daily quota, exchanges, conversations, routes, tokens, and estimated Bedrock cost per UTC day) and `GET /admin/conversations?days=N` (transcripts grouped by conversation ID, each with total tokens and cost), N = 1–30; `GET /admin/features` (each feature switch with its recent changes) and `POST /admin/features/{name}` `{"enabled": true\|false}` (the Feature Mgr page; see [Turning it on or off](#turning-it-on-or-off)). The admin function's role can list/read `transcripts/`, read the chat usage plan's usage, and read and overwrite only the parameters in `feature_flags`. Costs use `price_per_mtok_input`/`output` (Haiku 4.5: $1.10 / $5.50). **Knowledge** (`/kb/*`, function `ae-rv-employees-kb`): any employee can submit entries (`POST /kb/entries`), see their own (`GET /kb/entries/mine`) and view all live knowledge (`GET /kb/documents`). Admins review (`GET /kb/entries/pending`), approve with optional edits or reject with a reason (`POST /kb/entries/{id}/approve|reject`), remove (`DELETE /kb/documents/{id}`) and re-index (`POST /kb/sync`). Entries live in the documents bucket under `pending/`, `rejected/` (expire after 30 days) and `approved/`, the only prefix the data source indexes. **Herman** (`POST /assistant/chat` and `GET /assistant/status`, function `ae-rv-employees-assistant`): any employee, while his switch is on; see [Herman, the employee assistant](#herman-the-employee-assistant). Throttled to 2 requests a second (burst 5). CORS allows only aervsolutions.com, www, and localhost:4321 |
 
 Employee email addresses live only in the user pool, never in this public
 repo or in Terraform.
@@ -584,6 +587,15 @@ Employee clicks "Submit for review" ─► POST /kb/entries {type, fields, origi
   own prompt, tool, and allowed Cognito groups. The function checks the
   groups, never the model. `knowledge` is open to every employee. Future
   modes add their own tools and IAM statements.
+- **On/off switch.** Herman has his own switch, `/ae-rv/chatbot/herman/enabled`,
+  created by this module as `true` and flipped on the **Feature Mgr** admin
+  page like Eddie's.
+  - He reads it on every request, so a flip takes effect at once.
+  - When it's off, or can't be read, `POST /assistant/chat` answers 503
+    "Herman is switched off right now" before any model call.
+  - `GET /assistant/status` returns `{"enabled": …}` so the Herman tab can
+    say so.
+  - It doesn't affect Eddie, customers, or the Add Knowledge form.
 - **Stateless.** Like Eddie, Herman keeps no conversation: the browser sends
   the conversation (up to 40 messages) and the current draft on every turn.
   Each call logs the caller's `sub`, the mode, and token counts, never

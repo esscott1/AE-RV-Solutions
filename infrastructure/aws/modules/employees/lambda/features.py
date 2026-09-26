@@ -1,4 +1,4 @@
-"""Feature switches for the admin Features page (admin.py routes here).
+"""Feature switches for the admin Feature Mgr page (admin.py routes here).
 
 GET  /admin/features          every switch: on or off, and its recent changes
 POST /admin/features/{name}   {"enabled": true|false}: turn one on or off
@@ -10,8 +10,8 @@ seconds. FEATURE_FLAGS (from Terraform) maps each name to its parameter,
 and the function may read and write only those.
 
 Who changed what comes from the parameter's own version history. This page
-writes each change's description ("Off: set on the Features page by
-<email>"), and LastModifiedUser shows the source: this function's role, the
+writes each change's description ("Off: set on the Feature Mgr page by
+<email>"; before the page was renamed, "the Features page"), and LastModifiedUser shows the source: this function's role, the
 'Chatbot on/off' workflow's role, Terraform's CI role (which creates the
 parameter), or anyone else (console, CLI). Terraform
 ignores the parameter's value and description, so applies never undo a
@@ -34,6 +34,12 @@ FEATURES = {
         "description": "The public chatbot on every page of the website.",
         "offEffect": "Customers see “Chat is offline” and no AI calls are made.",
     },
+    "herman": {
+        "label": "Herman",
+        "description": "The employee assistant: the Herman tab in the chat window, which drafts knowledge for Eddie.",
+        "offEffect": "Employees see “Herman is switched off” in the Herman tab. Eddie, customers, and the "
+                     "Add Knowledge form aren’t affected.",
+    },
 }
 
 FLAGS = json.loads(os.environ.get("FEATURE_FLAGS") or "{}")
@@ -41,7 +47,8 @@ PAGE_ROLE = os.environ.get("ADMIN_ROLE_NAME", "")
 WORKFLOW_ROLE = os.environ.get("FLAG_WORKFLOW_ROLE_NAME", "")
 TERRAFORM_ROLE = os.environ.get("TERRAFORM_ROLE_NAME", "")
 HISTORY_SHOWN = 10
-PAGE_NOTE = re.compile(r"set on the Features page by (.+)$")
+# Matches the page's notes from before and after its rename.
+PAGE_NOTE = re.compile(r"set on the (?:Features|Feature Mgr) page by (.+)$")
 
 
 class NotFound(Exception):
@@ -122,7 +129,7 @@ def set_feature(ssm, caller, name, body):
     who = caller["email"] or caller["sub"]
     ssm.put_parameter(
         Name=FLAGS[name], Value="true" if enabled else "false", Type="String", Overwrite=True,
-        Description=f"{'On' if enabled else 'Off'}: set on the Features page by {who}"[:1024],
+        Description=f"{'On' if enabled else 'Off'}: set on the Feature Mgr page by {who}"[:1024],
     )
     print(json.dumps({"feature": name, "enabled": enabled, "sub": caller["sub"], "email": caller["email"]}))
     return feature_state(ssm, name)

@@ -31,10 +31,10 @@ locals {
 # --- On/off feature flag ---------------------------------------------------
 
 # The chatbot's kill switch, read on every request by both the state machine
-# and GET /chat/status. It's flipped outside Terraform (the admin Features
+# and GET /chat/status. It's flipped outside Terraform (the admin Feature Mgr
 # page, chatbot-toggle.yml, or the console), so Terraform only sets the
 # initial value: without ignore_changes, every apply would silently reset it.
-# The Features page also writes each change's description (who changed it),
+# The Feature Mgr page also writes each change's description (who changed it),
 # so that's ignored too.
 resource "aws_ssm_parameter" "enabled" {
   name        = local.flag_name

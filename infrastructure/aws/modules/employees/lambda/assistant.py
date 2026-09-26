@@ -1,4 +1,7 @@
-"""Herman, the employee assistant: POST /assistant/chat on the employee API.
+"""Herman, the employee assistant: /assistant/* on the employee API.
+
+POST /assistant/chat    a conversation turn (below)
+GET  /assistant/status  {"enabled": true|false}: whether Herman is switched on
 
 Herman is separate from Eddie, the public chatbot (modules/chatbot). He's
 reachable only with a signed-in employee's ID token, so he can later work
@@ -17,6 +20,11 @@ Request:  {"mode": "knowledge", "messages": [{"role", "content"}, ...],
 Response: {"reply", "draft": {"type", "fields"} | null, "ready", "missing": [...],
            "reviewNote": str | null}
 
+Herman has an on/off switch, the SSM parameter in HERMAN_FLAG, flipped on
+the admin Feature Mgr page (features.py). It's read on every request, so a
+change takes effect at once. When it's off, or can't be read, chat answers
+503 before any model call.
+
 Stateless, like Eddie: the browser sends the conversation and the current
 draft every turn. Logs the caller's ID, the mode, and token counts, never
 content.
@@ -33,7 +41,9 @@ import herman
 from claims import BadRequest, claims_of, parse_body, parse_groups, respond
 
 MODEL_ID = os.environ["MODEL_ID"]
-ROUTE = "POST /assistant/chat"
+FLAG = os.environ["HERMAN_FLAG"]
+CHAT = "POST /assistant/chat"
+STATUS = "GET /assistant/status"
 
 # The HTTP API gives up on an integration after 30 seconds, and the function
 # after 29, so a slow reply is cut off rather than left hanging.
@@ -41,18 +51,40 @@ bedrock = boto3.client("bedrock-runtime", config=Config(
     connect_timeout=3, read_timeout=25, retries={"mode": "standard", "total_max_attempts": 2},
 ))
 
+ssm = boto3.client("ssm")
+
 UNAVAILABLE = "Herman can't answer right now. Try again in a minute."
+OFF = "Herman is switched off right now."
+
+
+def switched_on():
+    """Herman's on/off switch. Exactly "true" is on; anything else, or a
+    switch that can't be read, is off."""
+    try:
+        return ssm.get_parameter(Name=FLAG)["Parameter"]["Value"] == "true"
+    except (ClientError, BotoCoreError) as err:
+        code = err.response["Error"]["Code"] if isinstance(err, ClientError) else type(err).__name__
+        print(json.dumps({"flag": FLAG, "error": code}))
+        return False
 
 
 def handler(event, context):
     claims = claims_of(event)
     if claims.get("token_use") != "id":
         return respond(401, {"message": "Send the ID token."})
-    if event.get("routeKey") != ROUTE:
+    route = event.get("routeKey")
+    if route not in (CHAT, STATUS):
         return respond(404, {"message": "Not found."})
 
+    enabled = switched_on()
+    if route == STATUS:
+        return respond(200, {"enabled": enabled})
+
     groups = parse_groups(claims.get("cognito:groups"))
-    log = {"route": ROUTE, "sub": claims.get("sub")}
+    log = {"route": CHAT, "sub": claims.get("sub")}
+    if not enabled:
+        print(json.dumps({**log, "status": 503, "off": True}))
+        return respond(503, {"message": OFF, "enabled": False})
 
     try:
         mode, messages, draft, seed = herman.check_request(parse_body(event))

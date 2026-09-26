@@ -87,7 +87,7 @@ module "employees" {
   knowledge_base_id = module.chatbot.knowledge_base_id
   kb_data_source_id = module.chatbot.kb_data_source_id
 
-  # Switches the admin Features page can turn on and off.
+  # Switches the admin Feature Mgr page can turn on and off.
   feature_flags = {
     eddie = module.chatbot.flag_parameter_name
   }

@@ -91,7 +91,7 @@ variable "model_invoke_arns" {
 }
 
 variable "feature_flags" {
-  description = "Feature switches the admin Features page can turn on and off: name -> SSM parameter holding \"true\" or \"false\". Each name also needs an entry in lambda/features.py FEATURES."
+  description = "Feature switches from other modules that the admin Feature Mgr page can turn on and off: name -> SSM parameter holding \"true\" or \"false\". Herman's switch is added by this module. Each name also needs an entry in lambda/features.py FEATURES."
   type        = map(string)
   default     = {}
 
@@ -102,13 +102,19 @@ variable "feature_flags" {
 }
 
 variable "flag_workflow_role_name" {
-  description = "The role the 'Chatbot on/off' GitHub workflow uses (bootstrap/chatbot.tf), so the Features page can label its changes in a switch's history."
+  description = "The role the 'Chatbot on/off' GitHub workflow uses (bootstrap/chatbot.tf), so the Feature Mgr page can label its changes in a switch's history."
   type        = string
   default     = "github-actions-chatbot-toggle"
 }
 
 variable "terraform_role_name" {
-  description = "The role Terraform's CI applies run as (bootstrap/main.tf), so the Features page labels the changes it makes, such as creating a switch, as \"Terraform\"."
+  description = "The role Terraform's CI applies run as (bootstrap/main.tf), so the Feature Mgr page labels the changes it makes, such as creating a switch, as \"Terraform\"."
   type        = string
   default     = "github-actions-terraform"
+}
+
+variable "herman_flag_name" {
+  description = "SSM parameter for Herman's on/off switch. Under /ae-rv/chatbot/, the path the CI roles can already manage (bootstrap/chatbot.tf), so no bootstrap change is needed."
+  type        = string
+  default     = "/ae-rv/chatbot/herman/enabled"
 }
