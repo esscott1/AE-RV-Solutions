@@ -79,3 +79,13 @@ variable "kb_data_source_id" {
   description = "The knowledge base's S3 data source (modules/chatbot), re-indexed after approvals and removals."
   type        = string
 }
+
+variable "model_id" {
+  description = "The Bedrock inference profile ARN Herman calls (modules/chatbot: the same Claude Haiku 4.5 profile as Eddie)."
+  type        = string
+}
+
+variable "model_invoke_arns" {
+  description = "Everything IAM must allow for invoking model_id: the inference profile and its foundation model in every region the profile routes to (modules/chatbot)."
+  type        = list(string)
+}

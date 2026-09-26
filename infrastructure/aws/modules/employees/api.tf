@@ -94,6 +94,23 @@ resource "aws_apigatewayv2_route" "kb" {
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
 
+# Herman, the employee assistant. Any signed-in employee; the function
+# decides from the caller's groups which of Herman's modes they get.
+resource "aws_apigatewayv2_integration" "assistant" {
+  api_id                 = aws_apigatewayv2_api.employees.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.assistant.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "assistant" {
+  api_id             = aws_apigatewayv2_api.employees.id
+  route_key          = "POST /assistant/chat"
+  target             = "integrations/${aws_apigatewayv2_integration.assistant.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
 # No access logs: HTTP API logging needs account-wide CloudWatch Logs
 # delivery permissions for CI. The Lambda logs each call instead.
 resource "aws_apigatewayv2_stage" "default" {

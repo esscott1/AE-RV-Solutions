@@ -87,6 +87,10 @@ module "employees" {
   knowledge_base_id = module.chatbot.knowledge_base_id
   kb_data_source_id = module.chatbot.kb_data_source_id
 
+  # Herman, the employee assistant, uses the same model as Eddie.
+  model_id          = module.chatbot.inference_profile_arn
+  model_invoke_arns = module.chatbot.model_invoke_arns
+
   tags = {
     Customer = "AERVSolutions"
   }

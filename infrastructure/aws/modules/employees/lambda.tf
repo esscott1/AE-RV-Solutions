@@ -257,3 +257,72 @@ resource "aws_lambda_permission" "kb" {
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.employees.execution_arn}/*/*/kb/*"
 }
+
+# --- POST /assistant/chat (Herman, the employee assistant) ---------------------------
+
+resource "aws_iam_role" "assistant" {
+  name               = "${var.name_prefix}-assistant"
+  assume_role_policy = data.aws_iam_policy_document.lambda_trust.json
+  tags               = var.tags
+}
+
+# Its own logs and the model, and nothing else. Herman only drafts: the
+# employee submits through /kb/entries, so he needs no access to the
+# documents bucket. Later modes (work orders, invoices) add their own
+# statements here.
+data "aws_iam_policy_document" "assistant" {
+  statement {
+    sid       = "Logs"
+    actions   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+    resources = ["${aws_cloudwatch_log_group.assistant.arn}:*"]
+  }
+
+  statement {
+    sid       = "InvokeModel"
+    actions   = ["bedrock:InvokeModel"]
+    resources = var.model_invoke_arns
+  }
+}
+
+resource "aws_iam_role_policy" "assistant" {
+  name   = "assistant"
+  role   = aws_iam_role.assistant.id
+  policy = data.aws_iam_policy_document.assistant.json
+}
+
+resource "aws_cloudwatch_log_group" "assistant" {
+  name              = "/aws/lambda/${var.name_prefix}-assistant"
+  retention_in_days = 30
+  tags              = var.tags
+}
+
+resource "aws_lambda_function" "assistant" {
+  function_name    = "${var.name_prefix}-assistant"
+  description      = "POST /assistant/chat on the employee API: Herman, who interviews employees and drafts knowledge that teaches Eddie."
+  role             = aws_iam_role.assistant.arn
+  runtime          = "python3.13"
+  architectures    = ["arm64"]
+  handler          = "assistant.handler"
+  filename         = data.archive_file.lambda.output_path
+  source_code_hash = data.archive_file.lambda.output_base64sha256
+  memory_size      = 256
+  # The HTTP API waits at most 30 seconds for an integration.
+  timeout = 29
+  tags    = var.tags
+
+  environment {
+    variables = {
+      MODEL_ID = var.model_id
+    }
+  }
+
+  depends_on = [aws_cloudwatch_log_group.assistant, aws_iam_role_policy.assistant]
+}
+
+resource "aws_lambda_permission" "assistant" {
+  statement_id  = "AllowEmployeeApi"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.assistant.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.employees.execution_arn}/*/POST/assistant/chat"
+}
