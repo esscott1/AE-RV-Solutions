@@ -126,7 +126,7 @@ deploy through GitHub Actions, never through a cloud-native push trigger:
   bucket have `prevent_destroy`, so any change that would destroy or replace
   them fails at plan time on the PR. To tear one down on purpose, remove its
   `prevent_destroy` in its own PR first.
-- **Chatbot on/off:** normally the site's **Features** admin page
+- **Chatbot on/off:** normally the site's **Feature Mgr** admin page
   (`/features/`, admins only), which flips the SSM parameter
   `/ae-rv/chatbot/enabled` through `POST /admin/features/eddie`. The chat API
   checks it on every request, so a change takes effect in seconds with no

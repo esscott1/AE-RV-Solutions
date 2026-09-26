@@ -77,10 +77,10 @@ export default function KBViewer() {
   for (const doc of data?.documents ?? []) (groups[doc.folder] ??= []).push(doc);
 
   return (
-    <Gate employee={employee} title="KBViewer" onSignIn={() => signIn()}>
+    <Gate employee={employee} title="KB Viewer" onSignIn={() => signIn()}>
       <div className="knowledge">
         <div className="knowledge__bar">
-          <h1 className="knowledge__title">KBViewer</h1>
+          <h1 className="knowledge__title">KB Viewer</h1>
           <div className="knowledge__actions">
             <button
               type="button"

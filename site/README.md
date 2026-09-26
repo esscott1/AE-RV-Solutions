@@ -89,7 +89,7 @@ when an employee opens that tab, so customers never download it.
 - Backend, prompts and eval: `infrastructure/README.md` → "Herman, the
   employee assistant".
 
-## Features page (admins)
+## Feature Mgr page (admins)
 
 `/features/` (`FeatureFlags.jsx`) turns features on and off for everyone. It's
 listed in the account menu for the `admins` group only. Today it has one

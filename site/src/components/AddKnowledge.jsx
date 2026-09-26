@@ -61,7 +61,7 @@ export default function AddKnowledge() {
     const result = await submitKnowledge(token, type, fields, extra);
     setBusy(false);
     if (result.status === 'ok') {
-      setMessage({ kind: 'ok', text: 'Submitted. An admin will review it on KBValidation before Eddie uses it.' });
+      setMessage({ kind: 'ok', text: 'Submitted. An admin will review it on KB Validation before Eddie uses it.' });
       setType(null);
       setFields(null);
       setFromHerman(null);

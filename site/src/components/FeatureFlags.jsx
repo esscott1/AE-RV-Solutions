@@ -3,7 +3,7 @@ import { getFeatures, setFeature } from '../lib/api.js';
 import { currentUser, signIn, signInConfigured } from '../lib/auth.js';
 import './FeatureFlags.css';
 
-// The /features/ page ("Features"): turn features on and off, for the admins
+// The /features/ page ("Feature Mgr"): turn features on and off, for the admins
 // group. Everything comes from the employee API's /admin/features routes,
 // which check the group themselves; this page only decides what to show. A
 // change takes effect within seconds, for everyone, with no deploy.
@@ -11,7 +11,7 @@ import './FeatureFlags.css';
 // Who made a change, and how (infrastructure/aws/modules/employees/lambda/features.py).
 // Workflow and Terraform changes already name themselves ("Chatbot on/off
 // workflow", "Terraform"); a person gets their route added.
-const VIA = { page: 'Features page', other: 'AWS console or CLI' };
+const VIA = { page: 'Feature Mgr', other: 'AWS console or CLI' };
 const who = (change) => (VIA[change.source] ? `${change.changedBy} (${VIA[change.source]})` : change.changedBy);
 
 const dateTime = (iso) =>
@@ -57,7 +57,7 @@ export default function FeatureFlags() {
 
   const shell = (content) => (
     <div className="feature-flags">
-      <h1 className="feature-flags__title">Features</h1>
+      <h1 className="feature-flags__title">Feature Mgr</h1>
       {content}
     </div>
   );
@@ -77,7 +77,7 @@ export default function FeatureFlags() {
   if (status === 'forbidden') {
     return shell(
       <>
-        <p>Features is for admins.</p>
+        <p>Feature Mgr is for admins.</p>
         <p>
           <a className="feature-flags__link" href="/employees/">
             Back to the Employees page
@@ -97,7 +97,7 @@ export default function FeatureFlags() {
   return (
     <div className="feature-flags">
       <div className="feature-flags__bar">
-        <h1 className="feature-flags__title">Features</h1>
+        <h1 className="feature-flags__title">Feature Mgr</h1>
         <button
           className="feature-flags__button feature-flags__button--quiet"
           type="button"
