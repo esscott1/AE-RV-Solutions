@@ -1,16 +1,20 @@
-"""Admin API: Eddie's usage and chat conversations. Admins only.
+"""Admin API: Eddie's usage and chat conversations, and feature switches.
+Admins only.
 
-GET /admin/usage?days=7          per-day and total usage, requests vs quota,
-                                 routes, tokens, estimated cost
-GET /admin/conversations?days=7  transcripts grouped by conversation, newest
-                                 first, each with its total tokens and cost
+GET  /admin/usage?days=7          per-day and total usage, requests vs quota,
+                                  routes, tokens, estimated cost
+GET  /admin/conversations?days=7  transcripts grouped by conversation, newest
+                                  first, each with its total tokens and cost
+GET  /admin/features              every feature switch and its recent changes
+POST /admin/features/{name}       turn one on or off (features.py)
 
 Both read the chat transcripts (modules/chatbot/transcripts.tf): one JSON
 file per exchange under transcripts/YYYY/MM/DD/ (UTC). `days` is 1-30,
 counting today. Costs are estimates of Bedrock model cost only, from the
 token counts and the per-million-token prices in the environment.
 
-Never logs transcript content: only the caller's ID and the route.
+Never logs transcript content: only the caller's ID and the route (and,
+for a switch change, the switch and who changed it).
 """
 
 import datetime
@@ -21,7 +25,8 @@ from concurrent.futures import ThreadPoolExecutor
 
 import boto3
 
-from claims import claims_of, parse_groups, respond
+import features
+from claims import BadRequest, claims_of, parse_body, parse_groups, respond
 
 BUCKET = os.environ["TRANSCRIPTS_BUCKET"]
 PREFIX = "transcripts/"
@@ -33,6 +38,7 @@ MAX_DAYS = 30
 
 s3 = boto3.client("s3")
 apigateway = boto3.client("apigateway")
+ssm = boto3.client("ssm")
 
 
 def requested_days(event):
@@ -40,8 +46,10 @@ def requested_days(event):
     try:
         days = int(raw)
     except ValueError:
-        return None
-    return days if 1 <= days <= MAX_DAYS else None
+        days = 0
+    if not 1 <= days <= MAX_DAYS:
+        raise BadRequest(f"days must be a whole number from 1 to {MAX_DAYS}.")
+    return date_range(days)
 
 
 def date_range(days):
@@ -195,9 +203,13 @@ def conversations(days):
     }
 
 
+# Each route takes the event and the caller, and returns its response body.
 ROUTES = {
-    "GET /admin/usage": usage,
-    "GET /admin/conversations": conversations,
+    "GET /admin/usage": lambda event, caller: usage(requested_days(event)),
+    "GET /admin/conversations": lambda event, caller: conversations(requested_days(event)),
+    "GET /admin/features": lambda event, caller: features.list_features(ssm),
+    "POST /admin/features/{name}": lambda event, caller: features.set_feature(
+        ssm, caller, (event.get("pathParameters") or {}).get("name"), parse_body(event)),
 }
 
 
@@ -217,8 +229,10 @@ def handler(event, context):
     if action is None:
         return respond(404, {"message": "Not found."})
 
-    days = requested_days(event)
-    if days is None:
-        return respond(400, {"message": f"days must be a whole number from 1 to {MAX_DAYS}."})
-
-    return respond(200, action(date_range(days)))
+    caller = {"sub": claims.get("sub", ""), "email": claims.get("email", "")}
+    try:
+        return respond(200, action(event, caller))
+    except BadRequest as err:
+        return respond(400, {"message": str(err)})
+    except features.NotFound:
+        return respond(404, {"message": "No such feature."})

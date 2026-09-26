@@ -251,18 +251,40 @@ one-time model-access use-case form, submitted in the Bedrock console.
 
 ### Turning it on or off
 
-- **Normally:** the Actions tab → **Chatbot on/off** → Run workflow → `on`
-  or `off`. It works from the GitHub mobile app, and the run history is the
-  audit log.
-- **Fallback:** `aws ssm put-parameter --name /ae-rv/chatbot/enabled --value
-  false --overwrite` (or edit the parameter in the console, under Systems
-  Manager → Parameter Store).
+- **Normally:** the **Features** admin page on the site (admins only). It
+  calls `POST /admin/features/eddie` on the employee API. It shows each
+  switch's recent changes and who made them.
+- **Backup:** the Actions tab → **Chatbot on/off** → Run workflow → `on` or
+  `off`. It works when the site or sign-in is down, and from the GitHub
+  mobile app.
+- **Last resort:** `aws ssm put-parameter --name /ae-rv/chatbot/enabled
+  --value false --overwrite` (or edit the parameter in the console, under
+  Systems Manager → Parameter Store).
+
+All three flip the same parameter, so they never disagree.
+
+**Who changed it** comes from the parameter's own version history (the last
+100 versions), which the Features page shows:
+- **Page changes:** the version's description names the admin ("Off: set on
+  the Features page by …"), and the admin function logs one line with the
+  admin's user ID.
+- **Workflow changes:** attributed to the workflow's role. Its run history
+  shows who ran it.
+- **Anything else:** shown as the AWS identity.
 
 The API enforces the flag on every request, so switching it off also stops
 bots that call the API directly without loading the site. Off costs nothing:
 the state machine stops before any Bedrock call. Terraform creates the flag
-as `false` and ignores its value afterwards, so an apply never undoes a
-toggle.
+as `false` and ignores its value and description afterwards, so an apply
+never undoes a toggle or its note.
+
+**Adding a switch** takes three things:
+1. an SSM parameter holding `true` or `false`;
+2. an entry in `feature_flags` in `live/prod/main.tf`, which also grants the
+   admin function access to it;
+3. an entry in `FEATURES` in `modules/employees/lambda/features.py`.
+
+Whatever the switch controls has to read the parameter itself.
 
 ### Volume and cost controls
 
@@ -512,7 +534,7 @@ Browser ─► /employees/ (public shell)
 | Email | Cognito's built-in email (50 a day): invites and password resets only. There's no SES, because only email sign-in codes would need it |
 | Tokens | ID and access tokens last 60 minutes, and the refresh token 12 hours |
 | `admins` group | For the Admin page (Phase 2). Its members see `"isAdmin": true` from `/me` |
-| API | `GET /me` (any employee). **Admins only** (the `admins` group, checked by the function, 403 otherwise): `GET /admin/usage?days=N` (requests vs the daily quota, exchanges, conversations, routes, tokens, and estimated Bedrock cost per UTC day) and `GET /admin/conversations?days=N` (transcripts grouped by conversation ID, each with total tokens and cost), N = 1–30. The admin function's role is read-only: list/read `transcripts/` and read the chat usage plan's usage. Costs use `price_per_mtok_input`/`output` (Haiku 4.5: $1.10 / $5.50). **Knowledge** (`/kb/*`, function `ae-rv-employees-kb`): any employee can submit entries (`POST /kb/entries`), see their own (`GET /kb/entries/mine`) and view all live knowledge (`GET /kb/documents`). Admins review (`GET /kb/entries/pending`), approve with optional edits or reject with a reason (`POST /kb/entries/{id}/approve|reject`), remove (`DELETE /kb/documents/{id}`) and re-index (`POST /kb/sync`). Entries live in the documents bucket under `pending/`, `rejected/` (expire after 30 days) and `approved/`, the only prefix the data source indexes. **Herman** (`POST /assistant/chat`, function `ae-rv-employees-assistant`): any employee; see [Herman, the employee assistant](#herman-the-employee-assistant). Throttled to 2 requests a second (burst 5). CORS allows only aervsolutions.com, www, and localhost:4321 |
+| API | `GET /me` (any employee). **Admins only** (the `admins` group, checked by the function, 403 otherwise): `GET /admin/usage?days=N` (requests vs the daily quota, exchanges, conversations, routes, tokens, and estimated Bedrock cost per UTC day) and `GET /admin/conversations?days=N` (transcripts grouped by conversation ID, each with total tokens and cost), N = 1–30; `GET /admin/features` (each feature switch with its recent changes) and `POST /admin/features/{name}` `{"enabled": true\|false}` (the Features page; see [Turning it on or off](#turning-it-on-or-off)). The admin function's role can list/read `transcripts/`, read the chat usage plan's usage, and read and overwrite only the parameters in `feature_flags`. Costs use `price_per_mtok_input`/`output` (Haiku 4.5: $1.10 / $5.50). **Knowledge** (`/kb/*`, function `ae-rv-employees-kb`): any employee can submit entries (`POST /kb/entries`), see their own (`GET /kb/entries/mine`) and view all live knowledge (`GET /kb/documents`). Admins review (`GET /kb/entries/pending`), approve with optional edits or reject with a reason (`POST /kb/entries/{id}/approve|reject`), remove (`DELETE /kb/documents/{id}`) and re-index (`POST /kb/sync`). Entries live in the documents bucket under `pending/`, `rejected/` (expire after 30 days) and `approved/`, the only prefix the data source indexes. **Herman** (`POST /assistant/chat`, function `ae-rv-employees-assistant`): any employee; see [Herman, the employee assistant](#herman-the-employee-assistant). Throttled to 2 requests a second (burst 5). CORS allows only aervsolutions.com, www, and localhost:4321 |
 
 Employee email addresses live only in the user pool, never in this public
 repo or in Terraform.

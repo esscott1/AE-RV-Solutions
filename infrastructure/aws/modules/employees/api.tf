@@ -57,7 +57,12 @@ resource "aws_apigatewayv2_integration" "admin" {
 }
 
 resource "aws_apigatewayv2_route" "admin" {
-  for_each = toset(["GET /admin/usage", "GET /admin/conversations"])
+  for_each = toset([
+    "GET /admin/usage",
+    "GET /admin/conversations",
+    "GET /admin/features",
+    "POST /admin/features/{name}",
+  ])
 
   api_id             = aws_apigatewayv2_api.employees.id
   route_key          = each.key

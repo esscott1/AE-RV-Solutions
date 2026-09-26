@@ -89,3 +89,20 @@ variable "model_invoke_arns" {
   description = "Everything IAM must allow for invoking model_id: the inference profile and its foundation model in every region the profile routes to (modules/chatbot)."
   type        = list(string)
 }
+
+variable "feature_flags" {
+  description = "Feature switches the admin Features page can turn on and off: name -> SSM parameter holding \"true\" or \"false\". Each name also needs an entry in lambda/features.py FEATURES."
+  type        = map(string)
+  default     = {}
+
+  validation {
+    condition     = alltrue([for name, parameter in var.feature_flags : can(regex("^[a-z][a-z0-9-]*$", name)) && startswith(parameter, "/")])
+    error_message = "Names are lowercase words (a-z, 0-9, -); parameters are full names starting with /."
+  }
+}
+
+variable "flag_workflow_role_name" {
+  description = "The role the 'Chatbot on/off' GitHub workflow uses (bootstrap/chatbot.tf), so the Features page can label its changes in a switch's history."
+  type        = string
+  default     = "github-actions-chatbot-toggle"
+}
