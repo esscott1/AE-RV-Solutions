@@ -75,7 +75,7 @@ resource "aws_lambda_permission" "me" {
   source_arn    = "${aws_apigatewayv2_api.employees.execution_arn}/*/GET/me"
 }
 
-# --- GET /admin/* (admins only) --------------------------------------------------
+# --- /admin/* (admins only) ---------------------------------------------------------
 
 resource "aws_iam_role" "admin" {
   name               = "${var.name_prefix}-admin"
@@ -83,8 +83,9 @@ resource "aws_iam_role" "admin" {
   tags               = var.tags
 }
 
-# Read-only: list and read chat transcripts, and read the chat API's daily
-# usage. It can't change or delete anything.
+# Reads chat transcripts and the chat API's daily usage, and reads and flips
+# the feature switches in var.feature_flags (the Features page). It can't
+# change anything else.
 data "aws_iam_policy_document" "admin" {
   statement {
     sid       = "Logs"
@@ -118,10 +119,21 @@ data "aws_iam_policy_document" "admin" {
       "arn:aws:apigateway:${local.region}::/usageplans/${var.usage_plan_id}/usage",
     ]
   }
+
+  # Only the switches' own parameters: their history (which includes the
+  # current value) and overwriting the value.
+  dynamic "statement" {
+    for_each = length(var.feature_flags) > 0 ? [1] : []
+    content {
+      sid       = "FeatureFlags"
+      actions   = ["ssm:GetParameterHistory", "ssm:PutParameter"]
+      resources = [for name in values(var.feature_flags) : "arn:aws:ssm:${local.region}:${data.aws_caller_identity.current.account_id}:parameter${name}"]
+    }
+  }
 }
 
 resource "aws_iam_role_policy" "admin" {
-  name   = "admin-read"
+  name   = "admin"
   role   = aws_iam_role.admin.id
   policy = data.aws_iam_policy_document.admin.json
 }
@@ -134,7 +146,7 @@ resource "aws_cloudwatch_log_group" "admin" {
 
 resource "aws_lambda_function" "admin" {
   function_name    = "${var.name_prefix}-admin"
-  description      = "GET /admin/usage and /admin/conversations on the employee API: Eddie's usage and chat conversations, for admins."
+  description      = "/admin/* on the employee API, for admins: Eddie's usage and chat conversations, and the feature switches."
   role             = aws_iam_role.admin.arn
   runtime          = "python3.13"
   architectures    = ["arm64"]
@@ -152,6 +164,11 @@ resource "aws_lambda_function" "admin" {
       API_KEY_ID            = var.api_key_id
       PRICE_PER_MTOK_INPUT  = tostring(var.price_per_mtok_input)
       PRICE_PER_MTOK_OUTPUT = tostring(var.price_per_mtok_output)
+      # The Features page (features.py): which parameter each switch is, and
+      # the roles its history is attributed to.
+      FEATURE_FLAGS           = jsonencode(var.feature_flags)
+      ADMIN_ROLE_NAME         = aws_iam_role.admin.name
+      FLAG_WORKFLOW_ROLE_NAME = var.flag_workflow_role_name
     }
   }
 
@@ -163,7 +180,7 @@ resource "aws_lambda_permission" "admin" {
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.admin.function_name
   principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_apigatewayv2_api.employees.execution_arn}/*/GET/admin/*"
+  source_arn    = "${aws_apigatewayv2_api.employees.execution_arn}/*/*/admin/*"
 }
 
 # --- /kb/* (knowledge administration) ---------------------------------------------
