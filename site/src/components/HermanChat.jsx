@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { assistantChat, submitKnowledge } from '../lib/api.js';
+import { assistantChat, getAssistantStatus, submitKnowledge } from '../lib/api.js';
 import { currentUser, signIn } from '../lib/auth.js';
 import { saveHermanDraft } from '../lib/herman.js';
 import { TYPES, buildMarkdown, validate } from '../lib/knowledge.js';
@@ -25,6 +25,7 @@ const COUNTER_FROM = 1600;
 const STORAGE_KEY = 'ae-rv-kb-intake';
 const SEED_OPENER = 'I want to teach Eddie about this.';
 const SUBMITTED_TEXT = 'Submitted for review. An admin will check it before Eddie uses it.';
+const OFF_TEXT = 'Herman is switched off right now.';
 
 const EMPTY = { messages: [], draft: null, missing: [], reviewNote: null, seed: null, ready: false };
 
@@ -50,6 +51,9 @@ function saveChat(chat) {
 // reply, source}. Herman starts a new chat about it, then calls onSeedUsed.
 export default function HermanChat({ seed, onSeedUsed }) {
   const [auth, setAuth] = useState('checking'); // checking | signedIn | signedOut
+  // Herman's on/off switch (Feature Mgr): checking | on | off. The API enforces
+  // it; this only lets the tab say so up front.
+  const [herman, setHerman] = useState('checking');
   const [chat, setChat] = useState(loadChat);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -76,15 +80,30 @@ export default function HermanChat({ seed, onSeedUsed }) {
   }, [chat, sending, notice]);
 
   useEffect(() => {
-    if (auth === 'signedIn') inputRef.current?.focus();
+    if (auth === 'signedIn') checkSwitch();
   }, [auth]);
 
-  // From Eddie's "Teach Eddie about this": start a new chat about it.
   useEffect(() => {
-    if (!seed || auth !== 'signedIn') return;
+    if (auth === 'signedIn' && herman === 'on') inputRef.current?.focus();
+  }, [auth, herman]);
+
+  // From Eddie's "Teach Eddie about this": start a new chat about it. While
+  // Herman is off, the exchange waits until he's back on.
+  useEffect(() => {
+    if (!seed || auth !== 'signedIn' || herman !== 'on') return;
     onSeedUsed();
     send(SEED_OPENER, { ...EMPTY, seed });
-  }, [seed, auth]);
+  }, [seed, auth, herman]);
+
+  async function checkSwitch() {
+    setHerman('checking');
+    const token = await idToken();
+    if (!token) return;
+    const result = await getAssistantStatus(token);
+    // If the check itself fails, show the chat: the API still refuses while
+    // he's off, and the tab then says so.
+    setHerman(result.status === 'ok' && result.data?.enabled === false ? 'off' : 'on');
+  }
 
   // A fresh token for each call: currentUser() renews an expired one.
   async function idToken() {
@@ -122,6 +141,7 @@ export default function HermanChat({ seed, onSeedUsed }) {
       setChat(base);
       setInput(text);
       if (result.status === 'unauthorized') setAuth('signedOut');
+      else if (result.status === 'off') setHerman('off');
       else setError(result.status === 'invalid' ? result.message : 'Herman can’t answer right now. Try again in a minute.');
       return;
     }
@@ -174,7 +194,23 @@ export default function HermanChat({ seed, onSeedUsed }) {
     }
   }
 
-  if (auth === 'checking') return <p className="chat-widget__state">Connecting…</p>;
+  if (auth === 'checking' || (auth === 'signedIn' && herman === 'checking')) {
+    return <p className="chat-widget__state">Connecting…</p>;
+  }
+  if (auth === 'signedIn' && herman === 'off') {
+    return (
+      <div className="chat-widget__state herman-chat__off">
+        <p>{OFF_TEXT}</p>
+        <p className="herman-chat__off-note">
+          An admin can turn him back on in Feature Mgr. Your conversation is kept. To add knowledge now, use the Add
+          Knowledge form.
+        </p>
+        <button type="button" className="chat-widget__send" onClick={checkSwitch}>
+          Check again
+        </button>
+      </div>
+    );
+  }
   if (auth === 'signedOut') {
     return (
       <div className="chat-widget__state herman-chat__signin">

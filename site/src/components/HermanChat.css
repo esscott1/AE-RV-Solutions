@@ -27,6 +27,23 @@
   margin: 0;
 }
 
+/* Herman switched off on Feature Mgr. */
+.herman-chat__off {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.6rem;
+}
+
+.herman-chat__off p {
+  margin: 0;
+}
+
+.herman-chat__off-note {
+  color: var(--pine-900);
+  font-size: 0.85rem;
+}
+
 /* The Eddie exchange this chat started from. */
 .herman-chat__seed {
   display: flex;

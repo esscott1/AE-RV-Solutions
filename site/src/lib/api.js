@@ -195,7 +195,9 @@ export function getAdminConversations(idToken, days) {
 // (/kb/*), Herman (/assistant/*) and feature switches (/admin/features).
 // Every call returns {status: 'ok', data}, {status: 'invalid', message} (the
 // server's 400 reason, e.g. a missing field), {status: 'forbidden'},
-// {status: 'unauthorized'}, or {status: 'error'}. Fails closed.
+// {status: 'unauthorized'}, {status: 'off', message} (a feature switched off
+// on Feature Mgr: a 503 with enabled false), or {status: 'error'}. Fails
+// closed.
 async function employeeCall(method, path, idToken, body) {
   if (!EMPLOYEE_API_URL || !idToken) return { status: 'unauthorized' };
   try {
@@ -212,6 +214,7 @@ async function employeeCall(method, path, idToken, body) {
     if (res.status === 400) return { status: 'invalid', message: data.message || 'Please check the form.' };
     if (res.status === 401) return { status: 'unauthorized' };
     if (res.status === 403) return { status: 'forbidden' };
+    if (res.status === 503 && data.enabled === false) return { status: 'off', message: data.message };
     return { status: 'error' };
   } catch {
     return { status: 'error' };
@@ -237,6 +240,8 @@ export const reindexKnowledge = (idToken) => employeeCall('POST', 'kb/sync', idT
 // whole conversation, the current draft, and the Eddie chat it started from
 // (if any) every turn. `data` is {reply, draft, ready, missing, reviewNote}.
 // Same statuses as the knowledge calls.
+// Whether Herman is switched on (Feature Mgr): data {enabled}.
+export const getAssistantStatus = (idToken) => employeeCall('GET', 'assistant/status', idToken);
 export const assistantChat = (idToken, { mode, messages, draft = null, seed = null }) =>
   employeeCall('POST', 'assistant/chat', idToken, { mode, messages, draft, seed });
 

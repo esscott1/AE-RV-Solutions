@@ -84,6 +84,10 @@ when an employee opens that tab, so customers never download it.
   form is otherwise unchanged: the kind-of-knowledge tiles and guided fields.
 - An admin approves or rejects it on KBValidation, which shows a "Drafted
   with Herman" badge, the note, and the author's employee ID.
+- **When Herman is switched off** on Feature Mgr, the tab says "Herman is
+  switched off right now", with a **Check again** button, instead of the
+  chat. If he's switched off mid-conversation, the next message comes back
+  with that notice, and nothing typed is lost.
 - The conversation lives in `sessionStorage` (`ae-rv-kb-intake`) for the tab
   only, up to Herman's 40-message limit.
 - Backend, prompts and eval: `infrastructure/README.md` → "Herman, the
