@@ -116,6 +116,15 @@ resource "aws_apigatewayv2_route" "assistant" {
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
 }
 
+# Whether Herman is switched on, so the Herman tab can say so when it opens.
+resource "aws_apigatewayv2_route" "assistant_status" {
+  api_id             = aws_apigatewayv2_api.employees.id
+  route_key          = "GET /assistant/status"
+  target             = "integrations/${aws_apigatewayv2_integration.assistant.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
 # No access logs: HTTP API logging needs account-wide CloudWatch Logs
 # delivery permissions for CI. The Lambda logs each call instead.
 resource "aws_apigatewayv2_stage" "default" {

@@ -3,6 +3,12 @@
 # One zip of lambda/ for every function: they share claims.py. output_file_mode
 # pins the files' permissions, so a plan run on Windows builds the same zip
 # (and hash) as CI on Linux.
+# The switches the admin Feature Mgr page can flip: those passed in (Eddie's),
+# plus Herman's, which this module owns.
+locals {
+  feature_flags = merge(var.feature_flags, { herman = aws_ssm_parameter.herman_enabled.name })
+}
+
 data "archive_file" "lambda" {
   type             = "zip"
   source_dir       = "${path.module}/lambda"
@@ -84,7 +90,7 @@ resource "aws_iam_role" "admin" {
 }
 
 # Reads chat transcripts and the chat API's daily usage, and reads and flips
-# the feature switches in var.feature_flags (the Features page). It can't
+# the feature switches in var.feature_flags (the Feature Mgr page). It can't
 # change anything else.
 data "aws_iam_policy_document" "admin" {
   statement {
@@ -123,11 +129,11 @@ data "aws_iam_policy_document" "admin" {
   # Only the switches' own parameters: their history (which includes the
   # current value) and overwriting the value.
   dynamic "statement" {
-    for_each = length(var.feature_flags) > 0 ? [1] : []
+    for_each = length(local.feature_flags) > 0 ? [1] : []
     content {
       sid       = "FeatureFlags"
       actions   = ["ssm:GetParameterHistory", "ssm:PutParameter"]
-      resources = [for name in values(var.feature_flags) : "arn:aws:ssm:${local.region}:${data.aws_caller_identity.current.account_id}:parameter${name}"]
+      resources = [for name in values(local.feature_flags) : "arn:aws:ssm:${local.region}:${data.aws_caller_identity.current.account_id}:parameter${name}"]
     }
   }
 }
@@ -164,9 +170,9 @@ resource "aws_lambda_function" "admin" {
       API_KEY_ID            = var.api_key_id
       PRICE_PER_MTOK_INPUT  = tostring(var.price_per_mtok_input)
       PRICE_PER_MTOK_OUTPUT = tostring(var.price_per_mtok_output)
-      # The Features page (features.py): which parameter each switch is, and
+      # The Feature Mgr page (features.py): which parameter each switch is, and
       # the roles its history is attributed to.
-      FEATURE_FLAGS           = jsonencode(var.feature_flags)
+      FEATURE_FLAGS           = jsonencode(local.feature_flags)
       ADMIN_ROLE_NAME         = aws_iam_role.admin.name
       FLAG_WORKFLOW_ROLE_NAME = var.flag_workflow_role_name
       TERRAFORM_ROLE_NAME     = var.terraform_role_name
@@ -276,7 +282,23 @@ resource "aws_lambda_permission" "kb" {
   source_arn    = "${aws_apigatewayv2_api.employees.execution_arn}/*/*/kb/*"
 }
 
-# --- POST /assistant/chat (Herman, the employee assistant) ---------------------------
+# --- /assistant/* (Herman, the employee assistant) ------------------------------------
+
+# Herman's on/off switch, flipped on the admin Feature Mgr page (features.py)
+# and read by the function on every request. Like Eddie's, it's created on and
+# then changed outside Terraform, so its value and the page's who-changed-it
+# note are ignored: applies never undo a change.
+resource "aws_ssm_parameter" "herman_enabled" {
+  name        = var.herman_flag_name
+  description = "Herman on/off switch: \"true\" or \"false\". Flip it on the Feature Mgr admin page."
+  type        = "String"
+  value       = "true"
+  tags        = var.tags
+
+  lifecycle {
+    ignore_changes = [value, description]
+  }
+}
 
 resource "aws_iam_role" "assistant" {
   name               = "${var.name_prefix}-assistant"
@@ -284,10 +306,10 @@ resource "aws_iam_role" "assistant" {
   tags               = var.tags
 }
 
-# Its own logs and the model, and nothing else. Herman only drafts: the
-# employee submits through /kb/entries, so he needs no access to the
-# documents bucket. Later modes (work orders, invoices) add their own
-# statements here.
+# Its own logs, the model, and reading his on/off switch, and nothing else.
+# Herman only drafts: the employee submits through /kb/entries, so he needs
+# no access to the documents bucket. Later modes (work orders, invoices) add
+# their own statements here.
 data "aws_iam_policy_document" "assistant" {
   statement {
     sid       = "Logs"
@@ -299,6 +321,12 @@ data "aws_iam_policy_document" "assistant" {
     sid       = "InvokeModel"
     actions   = ["bedrock:InvokeModel"]
     resources = var.model_invoke_arns
+  }
+
+  statement {
+    sid       = "ReadSwitch"
+    actions   = ["ssm:GetParameter"]
+    resources = [aws_ssm_parameter.herman_enabled.arn]
   }
 }
 
@@ -316,7 +344,7 @@ resource "aws_cloudwatch_log_group" "assistant" {
 
 resource "aws_lambda_function" "assistant" {
   function_name    = "${var.name_prefix}-assistant"
-  description      = "POST /assistant/chat on the employee API: Herman, who interviews employees and drafts knowledge that teaches Eddie."
+  description      = "/assistant/* on the employee API: Herman, who interviews employees and drafts knowledge that teaches Eddie."
   role             = aws_iam_role.assistant.arn
   runtime          = "python3.13"
   architectures    = ["arm64"]
@@ -330,7 +358,8 @@ resource "aws_lambda_function" "assistant" {
 
   environment {
     variables = {
-      MODEL_ID = var.model_id
+      MODEL_ID    = var.model_id
+      HERMAN_FLAG = aws_ssm_parameter.herman_enabled.name
     }
   }
 
@@ -342,5 +371,5 @@ resource "aws_lambda_permission" "assistant" {
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.assistant.function_name
   principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_apigatewayv2_api.employees.execution_arn}/*/POST/assistant/chat"
+  source_arn    = "${aws_apigatewayv2_api.employees.execution_arn}/*/*/assistant/*"
 }
