@@ -12,7 +12,8 @@ and the function may read and write only those.
 Who changed what comes from the parameter's own version history. This page
 writes each change's description ("Off: set on the Features page by
 <email>"), and LastModifiedUser shows the source: this function's role, the
-'Chatbot on/off' workflow's role, or anyone else (console, CLI). Terraform
+'Chatbot on/off' workflow's role, Terraform's CI role (which creates the
+parameter), or anyone else (console, CLI). Terraform
 ignores the parameter's value and description, so applies never undo a
 change or its note.
 """
@@ -38,6 +39,7 @@ FEATURES = {
 FLAGS = json.loads(os.environ.get("FEATURE_FLAGS") or "{}")
 PAGE_ROLE = os.environ.get("ADMIN_ROLE_NAME", "")
 WORKFLOW_ROLE = os.environ.get("FLAG_WORKFLOW_ROLE_NAME", "")
+TERRAFORM_ROLE = os.environ.get("TERRAFORM_ROLE_NAME", "")
 HISTORY_SHOWN = 10
 PAGE_NOTE = re.compile(r"set on the Features page by (.+)$")
 
@@ -61,6 +63,8 @@ def describe_change(version):
         source, who = "page", note.group(1) if note else "an admin"
     elif role and role == WORKFLOW_ROLE:
         source, who = "workflow", "Chatbot on/off workflow"
+    elif role and role == TERRAFORM_ROLE:
+        source, who = "terraform", "Terraform"
     else:
         # Console or CLI: the identity's last part, e.g. user/eric -> eric.
         source, who = "other", (arn.rsplit("/", 1)[-1] or arn or "unknown")
