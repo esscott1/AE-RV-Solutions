@@ -1,0 +1,24 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import FeatureFlags from '../components/FeatureFlags.jsx';
+---
+
+<!-- Feature Mgr (admins only): turn features on and off. A public shell, like
+     /ai-stats/: nothing protected is in this page. The switches come from the
+     employee API's /admin/features routes, which only answer members of the
+     Cognito admins group (infrastructure/aws/modules/employees). -->
+<BaseLayout title="Feature Mgr | A&E RV Solutions" description="Turn features on and off." noindex>
+  <main class="page">
+    <FeatureFlags client:load />
+  </main>
+</BaseLayout>
+
+<style>
+  .page {
+    width: var(--content-width);
+    max-width: 52rem;
+    min-height: 70vh;
+    margin-inline: auto;
+    padding: 2.5rem 0 4rem;
+  }
+</style>

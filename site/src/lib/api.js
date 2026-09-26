@@ -191,11 +191,12 @@ export function getAdminConversations(idToken, days) {
   return getAdmin(`admin/conversations?days=${days}`, idToken);
 }
 
-// Knowledge API (/kb/*). Every call returns {status: 'ok', data},
-// {status: 'invalid', message} (the server's 400 reason, e.g. a missing
-// field), {status: 'forbidden'}, {status: 'unauthorized'}, or
-// {status: 'error'}. Fails closed.
-async function knowledgeCall(method, path, idToken, body) {
+// Employee API calls with any method and an optional JSON body: knowledge
+// (/kb/*), Herman (/assistant/*) and feature switches (/admin/features).
+// Every call returns {status: 'ok', data}, {status: 'invalid', message} (the
+// server's 400 reason, e.g. a missing field), {status: 'forbidden'},
+// {status: 'unauthorized'}, or {status: 'error'}. Fails closed.
+async function employeeCall(method, path, idToken, body) {
   if (!EMPLOYEE_API_URL || !idToken) return { status: 'unauthorized' };
   try {
     const res = await fetch(new URL(path, EMPLOYEE_API_URL), {
@@ -219,22 +220,30 @@ async function knowledgeCall(method, path, idToken, body) {
 
 // `extra` is optional: {origin: 'chat', reviewNote} for a draft Herman wrote.
 export const submitKnowledge = (idToken, type, fields, extra = {}) =>
-  knowledgeCall('POST', 'kb/entries', idToken, { type, fields, ...extra });
-export const getMyKnowledge = (idToken) => knowledgeCall('GET', 'kb/entries/mine', idToken);
-export const getPendingKnowledge = (idToken) => knowledgeCall('GET', 'kb/entries/pending', idToken);
+  employeeCall('POST', 'kb/entries', idToken, { type, fields, ...extra });
+export const getMyKnowledge = (idToken) => employeeCall('GET', 'kb/entries/mine', idToken);
+export const getPendingKnowledge = (idToken) => employeeCall('GET', 'kb/entries/pending', idToken);
 // `fields` is optional: pass edited fields to publish the admin's version.
 export const approveKnowledge = (idToken, id, fields) =>
-  knowledgeCall('POST', `kb/entries/${encodeURIComponent(id)}/approve`, idToken, fields ? { fields } : {});
+  employeeCall('POST', `kb/entries/${encodeURIComponent(id)}/approve`, idToken, fields ? { fields } : {});
 export const rejectKnowledge = (idToken, id, reason) =>
-  knowledgeCall('POST', `kb/entries/${encodeURIComponent(id)}/reject`, idToken, { reason });
-export const getKnowledgeDocuments = (idToken) => knowledgeCall('GET', 'kb/documents', idToken);
+  employeeCall('POST', `kb/entries/${encodeURIComponent(id)}/reject`, idToken, { reason });
+export const getKnowledgeDocuments = (idToken) => employeeCall('GET', 'kb/documents', idToken);
 export const removeKnowledge = (idToken, id) =>
-  knowledgeCall('DELETE', `kb/documents/${encodeURIComponent(id)}`, idToken);
-export const reindexKnowledge = (idToken) => knowledgeCall('POST', 'kb/sync', idToken, {});
+  employeeCall('DELETE', `kb/documents/${encodeURIComponent(id)}`, idToken);
+export const reindexKnowledge = (idToken) => employeeCall('POST', 'kb/sync', idToken, {});
 
 // Herman, the employee assistant (POST /assistant/chat). Stateless: send the
 // whole conversation, the current draft, and the Eddie chat it started from
 // (if any) every turn. `data` is {reply, draft, ready, missing, reviewNote}.
 // Same statuses as the knowledge calls.
 export const assistantChat = (idToken, { mode, messages, draft = null, seed = null }) =>
-  knowledgeCall('POST', 'assistant/chat', idToken, { mode, messages, draft, seed });
+  employeeCall('POST', 'assistant/chat', idToken, { mode, messages, draft, seed });
+
+// Feature switches (the admin Features page; admins only). getFeatures ->
+// data {features: [{name, label, description, offEffect, enabled, updatedAt,
+// changedBy, source, history}]}; setFeature -> data is that one feature,
+// re-read after the change. `enabled` is null when the switch couldn't be read.
+export const getFeatures = (idToken) => employeeCall('GET', 'admin/features', idToken);
+export const setFeature = (idToken, name, enabled) =>
+  employeeCall('POST', `admin/features/${encodeURIComponent(name)}`, idToken, { enabled });

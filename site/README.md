@@ -89,6 +89,27 @@ when an employee opens that tab, so customers never download it.
 - Backend, prompts and eval: `infrastructure/README.md` → "Herman, the
   employee assistant".
 
+## Feature Mgr page (admins)
+
+`/features/` (`FeatureFlags.jsx`) turns features on and off for everyone. It's
+listed in the account menu for the `admins` group only. Today it has one
+switch, **Eddie**, the public chatbot.
+
+- **Server checks access:** the switches come from the employee API's
+  `/admin/features` routes, which check the admins group themselves.
+- **Confirm first:** every change asks for confirmation before anything is
+  sent, and the card shows the new state only once the server confirms it.
+- **Takes effect fast:** within seconds, with no deploy. Eddie's chat window
+  shows "Chat is offline" the next time a visitor opens it.
+- **History:** each switch shows when it last changed, who changed it, and
+  its recent changes, including changes made with the GitHub workflow,
+  Terraform or the AWS CLI.
+- **Local testing flips the real switch:** `npm run dev` talks to the
+  production API.
+
+Backend, backups and how to add a switch: `infrastructure/README.md` →
+"Turning it on or off".
+
 ## Replacing the hero photo
 
 `src/assets/heroImage.jpg` is rendered by `src/components/Hero.astro`

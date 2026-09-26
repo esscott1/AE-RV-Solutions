@@ -20,7 +20,7 @@ export default function KBValidation() {
     token &&
     getPendingKnowledge(token).then((r) => {
       if (r.status === 'ok') setEntries(r.data.entries);
-      else setError(r.status === 'forbidden' ? 'KBValidation is for admins.' : 'Couldn’t load the queue.');
+      else setError(r.status === 'forbidden' ? 'KB Validation is for admins.' : 'Couldn’t load the queue.');
     });
 
   useEffect(() => {
@@ -33,9 +33,9 @@ export default function KBValidation() {
   };
 
   return (
-    <Gate employee={employee} title="KBValidation" adminOnly onSignIn={() => signIn()}>
+    <Gate employee={employee} title="KB Validation" adminOnly onSignIn={() => signIn()}>
       <div className="knowledge">
-        <h1 className="knowledge__title">KBValidation</h1>
+        <h1 className="knowledge__title">KB Validation</h1>
         <p className="knowledge__lead">
           Knowledge employees have submitted. Approve it to add it to Eddie’s knowledge, edit it first if needed, or
           reject it with a reason the employee will see.
