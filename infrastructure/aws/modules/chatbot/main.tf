@@ -155,7 +155,13 @@ locals {
   # string: the S3 integration serializes it to JSON, and a string would be
   # JSON-encoded a second time (a quoted string in the file).
   transcript_key  = "'${local.transcripts_prefix}' & $fromMillis($millis(), '[Y0001]/[M01]/[D01]/[H01][m01][s01]') & '-' & $states.context.Execution.Name & '.json'"
-  transcript_body = "{'time': $now(), 'executionId': $states.context.Execution.Name, 'conversationId': $conversationId, 'route': $states.input.route, 'source': $states.input.source, 'messages': $messages, 'reply': $states.input.reply, 'tokens': {'classify': {'input': $classify_in, 'output': $classify_out}, 'answer': {'input': $answer_in, 'output': $answer_out}}}"
+  transcript_body = "{'time': $now(), 'executionId': $states.context.Execution.Name, 'conversationId': $conversationId, 'route': $states.input.route, 'source': $states.input.source, 'messages': $messages, 'reply': $states.input.reply, 'tokens': {'classify': {'input': $classify_in, 'output': $classify_out}, 'answer': {'input': $answer_in, 'output': $answer_out}}, 'timings': ${local.timings}}"
+
+  # How long each step took, in milliseconds, for the admin AI Stats page:
+  # the differences between the $millis() stamps each step assigns when it
+  # finishes (0 = the step didn't run, so its time is null). Answer follows
+  # Retrieve, or Classify if Retrieve didn't run. totalMs runs to Record.
+  timings = "{'flagMs': $t_flag > 0 ? $t_flag - $t_start : null, 'classifyMs': $t_classify > 0 ? $t_classify - $t_flag : null, 'retrieveMs': $t_retrieve > 0 ? $t_retrieve - $t_classify : null, 'answerMs': $t_answer > 0 ? $t_answer - ($t_retrieve > 0 ? $t_retrieve : $t_classify) : null, 'totalMs': $millis() - $t_start}"
 
   # Lowercase UUID, as crypto.randomUUID() makes. Shared by the API's request
   # model and the state machine.
@@ -204,6 +210,12 @@ locals {
           classify_out   = 0
           answer_in      = 0
           answer_out     = 0
+          # Step timestamps (milliseconds), for local.timings.
+          t_start    = "{% $millis() %}"
+          t_flag     = 0
+          t_classify = 0
+          t_retrieve = 0
+          t_answer   = 0
         }
         Next = "CheckFlag"
       }
@@ -214,6 +226,7 @@ locals {
         Resource  = "arn:aws:states:::aws-sdk:ssm:getParameter"
         Arguments = { Name = local.flag_name }
         Output    = { enabled = "{% $states.result.Parameter.Value = 'true' %}" }
+        Assign    = { t_flag = "{% $millis() %}" }
         Catch     = [{ ErrorEquals = ["States.ALL"], Next = "Reply_offline" }]
         Next      = "IsEnabled"
       }
@@ -268,7 +281,7 @@ locals {
           }
         }
         Output = { route = "{% ($states.result.Body.content[type = 'tool_use'].input.route)[0] %}" }
-        Assign = { classify_in = local.usage_tokens.input_tokens, classify_out = local.usage_tokens.output_tokens }
+        Assign = { classify_in = local.usage_tokens.input_tokens, classify_out = local.usage_tokens.output_tokens, t_classify = "{% $millis() %}" }
         Retry  = local.bedrock_retry
         Catch  = [{ ErrorEquals = ["States.ALL"], Next = "Reply_safety_referral" }]
         Next   = "Route"
@@ -301,8 +314,8 @@ locals {
             VectorSearchConfiguration = { NumberOfResults = var.kb_num_results }
           }
         }
-        Assign = { documents = "{% ${local.retrieved_documents} %}" }
-        Catch  = [{ ErrorEquals = ["States.ALL"], Next = "Answer" }]
+        Assign = { documents = "{% ${local.retrieved_documents} %}", t_retrieve = "{% $millis() %}" }
+        Catch  = [{ ErrorEquals = ["States.ALL"], Assign = { t_retrieve = "{% $millis() %}" }, Next = "Answer" }]
         Next   = "Answer"
       }
 
@@ -349,7 +362,7 @@ locals {
         # it's "general" whatever the model says: the knowledge base can't be
         # credited with an answer it never supplied.
         Output = "{% ($in := ($states.result.Body.content[type = 'tool_use'].input)[0]; $text := $in.answer; $ok := $states.result.Body.stop_reason = 'tool_use' and $type($text) = 'string' and $length($text) > 0; $src := $documents = '' ? 'general' : ($in.source in ['knowledge_base', 'both', 'general'] ? $in.source : 'general'); $ok ? {'route': 'answer', 'reply': $text, 'source': $src} : {'route': 'unavailable', 'reply': \"${local.replies.unavailable}\"}) %}"
-        Assign = { answer_in = local.usage_tokens.input_tokens, answer_out = local.usage_tokens.output_tokens }
+        Assign = { answer_in = local.usage_tokens.input_tokens, answer_out = local.usage_tokens.output_tokens, t_answer = "{% $millis() %}" }
         Retry  = local.bedrock_retry
         Catch  = [{ ErrorEquals = ["States.ALL"], Next = "Reply_unavailable" }]
         Next   = "Record"

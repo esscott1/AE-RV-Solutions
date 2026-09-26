@@ -7,11 +7,15 @@ GET  /admin/conversations?days=7  transcripts grouped by conversation, newest
                                   first, each with its total tokens and cost
 GET  /admin/features              every feature switch and its recent changes
 POST /admin/features/{name}       turn one on or off (features.py)
+GET  /admin/herman-usage?days=7   Herman's turns, tokens, cost and response
+                                  times, from his logs (herman_usage.py)
 
 Both read the chat transcripts (modules/chatbot/transcripts.tf): one JSON
 file per exchange under transcripts/YYYY/MM/DD/ (UTC). `days` is 1-30,
 counting today. Costs are estimates of Bedrock model cost only, from the
-token counts and the per-million-token prices in the environment.
+token counts and the per-million-token prices in the environment. Response
+times come from each transcript's `timings` (the state machine records them);
+older transcripts have none.
 
 Never logs transcript content: only the caller's ID and the route (and,
 for a switch change, the switch and who changed it).
@@ -26,6 +30,7 @@ from concurrent.futures import ThreadPoolExecutor
 import boto3
 
 import features
+import herman_usage
 from claims import BadRequest, claims_of, parse_body, parse_groups, respond
 
 BUCKET = os.environ["TRANSCRIPTS_BUCKET"]
@@ -39,6 +44,7 @@ MAX_DAYS = 30
 s3 = boto3.client("s3")
 apigateway = boto3.client("apigateway")
 ssm = boto3.client("ssm")
+logs = boto3.client("logs")
 
 
 def requested_days(event):
@@ -87,6 +93,13 @@ def tokens_of(t):
     return sum(int(p.get("input") or 0) for p in parts), sum(int(p.get("output") or 0) for p in parts)
 
 
+def response_ms(t):
+    """The exchange's total time in milliseconds, or None before timings were
+    recorded."""
+    value = (t.get("timings") or {}).get("totalMs")
+    return value if isinstance(value, (int, float)) else None
+
+
 def cost(tokens_in, tokens_out):
     return round(tokens_in * PRICE_IN / 1e6 + tokens_out * PRICE_OUT / 1e6, 6)
 
@@ -117,7 +130,7 @@ def usage(days):
     transcripts = load_transcripts(days)
     requests = requests_per_day(days)
     per_day = {f"{d:%Y-%m-%d}": {"exchanges": 0, "conversations": set(), "routes": Counter(),
-                                 "tokensIn": 0, "tokensOut": 0} for d in days}
+                                 "tokensIn": 0, "tokensOut": 0, "responseMs": []} for d in days}
     for t in transcripts:
         day = per_day.get((t.get("time") or "")[:10])
         if day is None:
@@ -128,6 +141,7 @@ def usage(days):
         day["routes"][t.get("route", "unknown")] += 1
         day["tokensIn"] += tokens_in
         day["tokensOut"] += tokens_out
+        day["responseMs"].append(response_ms(t))
 
     rows = []
     for date, day in per_day.items():
@@ -142,6 +156,7 @@ def usage(days):
             "tokensIn": day["tokensIn"],
             "tokensOut": day["tokensOut"],
             "cost": cost(day["tokensIn"], day["tokensOut"]),
+            "responseMs": herman_usage.timing(day["responseMs"]),
         })
 
     routes = Counter()
@@ -159,6 +174,7 @@ def usage(days):
             "tokensIn": tokens_in,
             "tokensOut": tokens_out,
             "cost": cost(tokens_in, tokens_out),
+            "responseMs": herman_usage.timing(v for d in per_day.values() for v in d["responseMs"]),
         },
         "prices": {"inputPerMillion": PRICE_IN, "outputPerMillion": PRICE_OUT},
     }
@@ -177,6 +193,7 @@ def conversations(days):
             "tokensIn": tokens_in,
             "tokensOut": tokens_out,
             "cost": cost(tokens_in, tokens_out),
+            "timings": t.get("timings"),
         })
 
     result = []
@@ -210,6 +227,7 @@ ROUTES = {
     "GET /admin/features": lambda event, caller: features.list_features(ssm),
     "POST /admin/features/{name}": lambda event, caller: features.set_feature(
         ssm, caller, (event.get("pathParameters") or {}).get("name"), parse_body(event)),
+    "GET /admin/herman-usage": lambda event, caller: herman_usage.usage(logs, requested_days(event)),
 }
 
 
@@ -236,3 +254,6 @@ def handler(event, context):
         return respond(400, {"message": str(err)})
     except features.NotFound:
         return respond(404, {"message": "No such feature."})
+    except herman_usage.Unavailable as err:
+        print(json.dumps({"route": route, "error": str(err)}))
+        return respond(503, {"message": "Herman's usage couldn't be loaded. Try again shortly."})

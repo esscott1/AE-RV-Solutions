@@ -344,6 +344,7 @@ last state, `Record`, writes it, and S3 deletes it after 30 days
 | The route (answer, safety_referral, emergency, decline, unavailable, invalid, offline) and the source label | |
 | The conversation the widget sent (at most 8 messages) and Eddie's reply | |
 | Input and output token counts for the Classify and Answer calls | |
+| **Timings** (milliseconds): `flagMs`, `classifyMs`, `retrieveMs`, `answerMs` and `totalMs`. Each is the gap between `$millis()` stamps the state machine assigns as each step finishes, so a step that didn't run is `null`. Transcripts from before 2026-09-26 have none | |
 
 - **Every reply is recorded**, including offline and safety referrals, so
   usage totals are complete.
@@ -352,8 +353,10 @@ last state, `Record`, writes it, and S3 deletes it after 30 days
 - **Least privilege:**
   - the state machine can only write under `transcripts/`
   - the CI roles can configure the bucket but can't read transcripts
-- **Browse them** in the S3 console (the `chat_transcripts_bucket` output).
-  A later Admin page will show them and usage totals.
+- **Browse them** in the S3 console (the `chat_transcripts_bucket` output),
+  or on the admin **AI Stats** page. AI Stats shows usage, cost, and the
+  median and slowest response time per day, and each exchange's step
+  timings.
 - **Why S3 rather than DynamoDB:** at the 50-a-day quota, both cost well
   under a cent a month. Files are simpler to expire, browse, and download.
 - The chat widget doesn't yet tell visitors that chats are stored. That
@@ -539,7 +542,7 @@ Browser ─► /employees/ (public shell)
 | Email | Cognito's built-in email (50 a day): invites and password resets only. There's no SES, because only email sign-in codes would need it |
 | Tokens | ID and access tokens last 60 minutes, and the refresh token 12 hours |
 | `admins` group | For the Admin page (Phase 2). Its members see `"isAdmin": true` from `/me` |
-| API | `GET /me` (any employee). **Admins only** (the `admins` group, checked by the function, 403 otherwise): `GET /admin/usage?days=N` (requests vs the daily quota, exchanges, conversations, routes, tokens, and estimated Bedrock cost per UTC day) and `GET /admin/conversations?days=N` (transcripts grouped by conversation ID, each with total tokens and cost), N = 1–30; `GET /admin/features` (each feature switch with its recent changes) and `POST /admin/features/{name}` `{"enabled": true\|false}` (the Feature Mgr page; see [Turning it on or off](#turning-it-on-or-off)). The admin function's role can list/read `transcripts/`, read the chat usage plan's usage, and read and overwrite only the parameters in `feature_flags`. Costs use `price_per_mtok_input`/`output` (Haiku 4.5: $1.10 / $5.50). **Knowledge** (`/kb/*`, function `ae-rv-employees-kb`): any employee can submit entries (`POST /kb/entries`), see their own (`GET /kb/entries/mine`) and view all live knowledge (`GET /kb/documents`). Admins review (`GET /kb/entries/pending`), approve with optional edits or reject with a reason (`POST /kb/entries/{id}/approve|reject`), remove (`DELETE /kb/documents/{id}`) and re-index (`POST /kb/sync`). Entries live in the documents bucket under `pending/`, `rejected/` (expire after 30 days) and `approved/`, the only prefix the data source indexes. **Herman** (`POST /assistant/chat` and `GET /assistant/status`, function `ae-rv-employees-assistant`): any employee, while his switch is on; see [Herman, the employee assistant](#herman-the-employee-assistant). Throttled to 2 requests a second (burst 5). CORS allows only aervsolutions.com, www, and localhost:4321 |
+| API | `GET /me` (any employee). **Admins only** (the `admins` group, checked by the function, 403 otherwise): `GET /admin/usage?days=N` (requests vs the daily quota, exchanges, conversations, routes, tokens, and estimated Bedrock cost per UTC day) and `GET /admin/conversations?days=N` (transcripts grouped by conversation ID, each with total tokens and cost), N = 1–30; `GET /admin/herman-usage?days=N` (Herman's usage, cost and response times, from his logs); `GET /admin/features` (each feature switch with its recent changes) and `POST /admin/features/{name}` `{"enabled": true\|false}` (the Feature Mgr page; see [Turning it on or off](#turning-it-on-or-off)). The admin function's role can list/read `transcripts/`, read the chat usage plan's usage, and read and overwrite only the parameters in `feature_flags`. Costs use `price_per_mtok_input`/`output` (Haiku 4.5: $1.10 / $5.50). **Knowledge** (`/kb/*`, function `ae-rv-employees-kb`): any employee can submit entries (`POST /kb/entries`), see their own (`GET /kb/entries/mine`) and view all live knowledge (`GET /kb/documents`). Admins review (`GET /kb/entries/pending`), approve with optional edits or reject with a reason (`POST /kb/entries/{id}/approve|reject`), remove (`DELETE /kb/documents/{id}`) and re-index (`POST /kb/sync`). Entries live in the documents bucket under `pending/`, `rejected/` (expire after 30 days) and `approved/`, the only prefix the data source indexes. **Herman** (`POST /assistant/chat` and `GET /assistant/status`, function `ae-rv-employees-assistant`): any employee, while his switch is on; see [Herman, the employee assistant](#herman-the-employee-assistant). Throttled to 2 requests a second (burst 5). CORS allows only aervsolutions.com, www, and localhost:4321 |
 
 Employee email addresses live only in the user pool, never in this public
 repo or in Terraform.
@@ -598,8 +601,23 @@ Employee clicks "Submit for review" ─► POST /kb/entries {type, fields, origi
   - It doesn't affect Eddie, customers, or the Add Knowledge form.
 - **Stateless.** Like Eddie, Herman keeps no conversation: the browser sends
   the conversation (up to 40 messages) and the current draft on every turn.
-  Each call logs the caller's `sub`, the mode, and token counts, never
-  content.
+  Each chat turn logs one JSON line: the caller's `sub` and email, the mode,
+  the model, token counts, `bedrockMs` (Bedrock's own processing time, from
+  the `x-amzn-bedrock-invocation-latency` response header) and `totalMs` (the
+  whole turn). It never logs content.
+- **Usage on AI Stats.** `GET /admin/herman-usage?days=N` (admins, N = 1–30)
+  runs one CloudWatch Logs Insights query over those lines and returns:
+  - turns, employees, tokens and estimated cost, per day, per model and per
+    employee;
+  - how often he was switched off, and errors;
+  - median and slowest response times.
+
+  His logs are kept 30 days, so that's as far back as it goes.
+  - **Costs:** priced per model from `HERMAN_PRICES`, the same Haiku rates as
+    Eddie. A model with no price shows as unknown, never $0.
+  - **Older lines:** those without a model count as the current one.
+  - **Permissions:** the admin role can start queries on Herman's log group
+    only.
 - **Cost.** About half a cent per turn (Haiku). The API's shared throttle is
   2 requests a second.
 
