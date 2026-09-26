@@ -370,3 +370,17 @@
   white-space: nowrap;
   border: 0;
 }
+
+/* Herman's note on an entry he drafted (KBValidation). */
+.knowledge__review-note {
+  padding: 0.6rem 0.9rem;
+  border-left: 4px solid var(--clay-700);
+  border-radius: 8px;
+  background: var(--canvas-50);
+  font-size: 0.9rem;
+}
+
+.knowledge__badge--herman {
+  background: var(--lantern-500);
+  text-transform: none;
+}

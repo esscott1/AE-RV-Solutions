@@ -1,6 +1,13 @@
-import { Fragment, useEffect, useId, useRef, useState } from 'react';
+import { Suspense, lazy, useEffect, useId, useRef, useState } from 'react';
 import { chatConfigured, getChatStatus, sendChatMessage } from '../lib/api.js';
+import { EDGES, useFloatingWindow } from '../lib/floatingWindow.js';
+import { hasEmployeeSession } from '../lib/herman.js';
+import FormattedReply from './FormattedReply.jsx';
 import './ChatWidget.css';
+
+// Herman, the employee assistant, is a second tab for signed-in employees.
+// Loaded on demand, so customers never download his code.
+const HermanChat = lazy(() => import('./HermanChat.jsx'));
 
 // Must stay within the chat API's request limits (modules/chatbot
 // variables), which reject anything larger with a 400.
@@ -27,6 +34,14 @@ const SOURCE_CAPTIONS = {
   knowledge_base: "From A&E's knowledge base",
   both: "From A&E's knowledge base and general knowledge",
   general: 'From general knowledge',
+};
+
+// Signed-in employees get a link under each answer that switches to the
+// Herman tab with this exchange, to teach Eddie what he was missing. A
+// "general" answer means no A&E knowledge matched: that's the gap to fill.
+const TEACH_TEXT = {
+  general: 'Eddie had no A&E info for this. Teach him with Herman',
+  default: 'Teach Eddie about this',
 };
 
 // The last messages that fit the API's limits: at most MAX_MESSAGES,
@@ -86,61 +101,6 @@ function saveConversation(messages) {
   }
 }
 
-// Renders the small markdown subset the model uses (**bold**, "- " or
-// "1. " lists, line breaks) as React elements. Model output is never
-// parsed as HTML, so it can't inject markup.
-function inline(text) {
-  return text.split(/\*\*(.+?)\*\*/g).map((part, i) =>
-    i % 2 === 1 ? <strong key={i}>{part}</strong> : <Fragment key={i}>{part}</Fragment>,
-  );
-}
-
-function FormattedReply({ text }) {
-  const blocks = [];
-  for (const line of text.split('\n')) {
-    const bullet = line.match(/^\s*[-*•]\s+(.*)$/);
-    const numbered = line.match(/^\s*\d+[.)]\s+(.*)$/);
-    const item = bullet ?? numbered;
-    const listType = bullet ? 'ul' : 'ol';
-    const last = blocks[blocks.length - 1];
-
-    if (item) {
-      if (last?.type === listType) last.items.push(item[1]);
-      else blocks.push({ type: listType, items: [item[1]] });
-    } else if (line.trim() === '') {
-      blocks.push({ type: 'break' });
-    } else if (last?.type === 'p') {
-      last.lines.push(line);
-    } else {
-      blocks.push({ type: 'p', lines: [line] });
-    }
-  }
-
-  return blocks.map((block, i) => {
-    if (block.type === 'break') return null;
-    if (block.type === 'p') {
-      return (
-        <p key={i}>
-          {block.lines.map((line, j) => (
-            <Fragment key={j}>
-              {j > 0 && <br />}
-              {inline(line)}
-            </Fragment>
-          ))}
-        </p>
-      );
-    }
-    const List = block.type;
-    return (
-      <List key={i}>
-        {block.items.map((itemText, j) => (
-          <li key={j}>{inline(itemText)}</li>
-        ))}
-      </List>
-    );
-  });
-}
-
 export default function ChatWidget() {
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState('idle'); // idle | checking | on | off
@@ -152,6 +112,13 @@ export default function ChatWidget() {
   const [conversationId, setConversationId] = useState(loadConversationId);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
+  // Checked when the panel opens: the conversation (and the tabs) only
+  // render then, so the server render never needs it.
+  const [employee, setEmployee] = useState(false);
+  const [tab, setTab] = useState('eddie'); // eddie | herman (employees only)
+  // An Eddie exchange handed to Herman by "Teach Eddie about this".
+  const [teachSeed, setTeachSeed] = useState(null);
+  const panelRef = useRef(null);
 
   const panelId = useId();
   const launcherRef = useRef(null);
@@ -176,6 +143,9 @@ export default function ChatWidget() {
   // browsing the site doesn't call the API.
   useEffect(() => {
     if (!open) return;
+    const signedIn = hasEmployeeSession();
+    setEmployee(signedIn);
+    if (!signedIn) setTab('eddie');
     let cancelled = false;
     setStatus('checking');
     getChatStatus().then((enabled) => {
@@ -187,10 +157,15 @@ export default function ChatWidget() {
   }, [open]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || tab !== 'eddie') return;
     if (status === 'on') inputRef.current?.focus();
     else closeRef.current?.focus();
-  }, [open, status]);
+  }, [open, status, tab]);
+
+  // Resizable from any edge and movable by the title bar
+  // (lib/floatingWindow.js). Until the visitor picks a size, Herman's tab
+  // opens large (his drafts need the room) and Eddie's stays compact.
+  const win = useFloatingWindow(panelRef, open, tab === 'herman');
 
   if (!chatConfigured) return null;
 
@@ -226,19 +201,61 @@ export default function ChatWidget() {
     if (event.key === 'Escape') close();
   }
 
+  const eddieTab = tab === 'eddie';
+  const large = win.mode !== 'compact';
+
   return (
     <div className="chat-widget">
       {open && (
         <div
           id={panelId}
-          className="chat-widget__panel"
+          ref={panelRef}
+          className={`chat-widget__panel chat-widget__panel--${win.mode}`}
           role="dialog"
           aria-label="A&E RV Solutions assistant"
           onKeyDown={onPanelKeyDown}
         >
-          <div className="chat-widget__header">
-            <span className="chat-widget__title">A&amp;E RV Solutions assistant</span>
-            {messages.length > 0 && status === 'on' && (
+          {/* Drag any edge or corner to resize, or the title bar to move. The
+              corner grip is also the keyboard handle. */}
+          {EDGES.map((edge) => (
+            <div
+              key={edge}
+              className={`chat-widget__edge chat-widget__edge--${edge}`}
+              aria-hidden="true"
+              {...win.edgeProps(edge)}
+            />
+          ))}
+          <button
+            type="button"
+            className="chat-widget__grip"
+            aria-label="Resize the chat window with the arrow keys, or move it with Shift and the arrow keys"
+            title="Drag any edge to resize, or the title bar to move"
+            {...win.edgeProps('nw')}
+            onKeyDown={win.onKeyDown}
+          />
+          <div className="chat-widget__header" {...win.moveProps}>
+            {employee ? (
+              <div className="chat-widget__tabs" role="tablist" aria-label="Assistants">
+                {[
+                  ['eddie', 'Eddie'],
+                  ['herman', 'Herman'],
+                ].map(([key, label]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    role="tab"
+                    className="chat-widget__tab"
+                    aria-selected={tab === key}
+                    onClick={() => setTab(key)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <span className="chat-widget__title">A&amp;E RV Solutions assistant</span>
+            )}
+            {eddieTab && messages.length > 0 && status === 'on' && (
               <button
                 type="button"
                 className="chat-widget__text-button"
@@ -253,6 +270,16 @@ export default function ChatWidget() {
             )}
             <button
               type="button"
+              className="chat-widget__close chat-widget__size"
+              onClick={win.toggle}
+              aria-label={large ? 'Make the chat window small' : 'Make the chat window large'}
+              aria-pressed={large}
+              title={large ? 'Small, above the chat button' : 'Large, above the chat button'}
+            >
+              <span aria-hidden="true">{large ? '⤡' : '⤢'}</span>
+            </button>
+            <button
+              type="button"
               ref={closeRef}
               className="chat-widget__close"
               onClick={close}
@@ -262,11 +289,17 @@ export default function ChatWidget() {
             </button>
           </div>
 
-          {status === 'checking' && <p className="chat-widget__state">Connecting…</p>}
+          {!eddieTab && (
+            <Suspense fallback={<p className="chat-widget__state">Connecting…</p>}>
+              <HermanChat seed={teachSeed} onSeedUsed={() => setTeachSeed(null)} />
+            </Suspense>
+          )}
 
-          {status === 'off' && <p className="chat-widget__state">{OFFLINE_TEXT}</p>}
+          {eddieTab && status === 'checking' && <p className="chat-widget__state">Connecting…</p>}
 
-          {status === 'on' && (
+          {eddieTab && status === 'off' && <p className="chat-widget__state">{OFFLINE_TEXT}</p>}
+
+          {eddieTab && status === 'on' && (
             <>
               <p className="chat-widget__notice">{NOTICE_TEXT}</p>
 
@@ -299,6 +332,22 @@ export default function ChatWidget() {
                           <FormattedReply text={message.content} />
                           {message.route === 'answer' && SOURCE_CAPTIONS[message.source] && (
                             <p className="chat-widget__source">{SOURCE_CAPTIONS[message.source]}</p>
+                          )}
+                          {employee && message.route === 'answer' && messages[i - 1]?.role === 'user' && (
+                            <button
+                              type="button"
+                              className="chat-widget__teach"
+                              onClick={() => {
+                                setTeachSeed({
+                                  question: messages[i - 1].content,
+                                  reply: message.content,
+                                  source: message.source,
+                                });
+                                setTab('herman');
+                              }}
+                            >
+                              {TEACH_TEXT[message.source] ?? TEACH_TEXT.default} →
+                            </button>
                           )}
                         </>
                       ) : (

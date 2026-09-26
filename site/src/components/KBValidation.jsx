@@ -6,8 +6,9 @@ import { useEmployee } from '../lib/useEmployee.js';
 import { Gate, KnowledgeForm, MarkdownView, Preview, formatDate, indexingText } from './KnowledgeForm.jsx';
 
 // /kb-validation/: admins (the Cognito admins group) review submitted
-// knowledge. Approving publishes it to approved/ and starts indexing;
-// rejecting sends the reason back to the employee.
+// knowledge, from the form or drafted with Herman. Approving publishes it to
+// approved/ and starts indexing; rejecting sends the reason back to the
+// employee.
 export default function KBValidation() {
   const employee = useEmployee();
   const [entries, setEntries] = useState(null);
@@ -95,10 +96,19 @@ function PendingEntry({ entry, token, onDone }) {
       <header className="knowledge__card-head">
         <span className="knowledge__badge">{TYPES[entry.type]?.label ?? entry.type}</span>
         <strong>{entry.fields.title}</strong>
+        {entry.origin === 'chat' && <span className="knowledge__badge knowledge__badge--herman">Drafted with Herman</span>}
         <span className="knowledge__muted">
           by {entry.author?.email} · {formatDate(entry.submittedAt)}
         </span>
+        {/* The Cognito user ID: permanent, unlike the email. */}
+        {entry.author?.sub && <span className="knowledge__muted">Employee ID {entry.author.sub}</span>}
       </header>
+
+      {entry.reviewNote && (
+        <p className="knowledge__review-note">
+          <strong>Herman’s note for the reviewer:</strong> {entry.reviewNote}
+        </p>
+      )}
 
       {editing ? (
         <>

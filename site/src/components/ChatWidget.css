@@ -36,6 +36,7 @@
 }
 
 .chat-widget__panel {
+  position: relative;
   display: flex;
   flex-direction: column;
   width: 380px;
@@ -47,13 +48,167 @@
   overflow: hidden;
 }
 
+/* The expand button's larger window: most of the screen, for longer
+   conversations (Herman's tab opens this way). The message list grows to
+   fill it. */
+.chat-widget__panel--expanded {
+  width: min(760px, calc(100vw - 2.5rem));
+  height: calc(100vh - 7rem);
+  height: calc(100dvh - 7rem);
+  max-height: none;
+}
+
+/* A window the visitor has dragged or resized: it floats where they put it.
+   lib/floatingWindow.js sets the four variables and keeps it on screen. */
+.chat-widget__panel--free {
+  position: fixed;
+  left: var(--chat-widget-left);
+  top: var(--chat-widget-top);
+  width: var(--chat-widget-width);
+  height: var(--chat-widget-height);
+  max-height: none;
+}
+
+/* Invisible drag strips along each edge and corner, with the matching
+   resize cursor. Inside the window, since it clips anything outside. */
+.chat-widget__edge {
+  position: absolute;
+  z-index: 2;
+  touch-action: none;
+}
+
+.chat-widget__edge--n,
+.chat-widget__edge--s {
+  left: 12px;
+  right: 12px;
+  height: 6px;
+  cursor: ns-resize;
+}
+
+.chat-widget__edge--n {
+  top: 0;
+}
+
+.chat-widget__edge--s {
+  bottom: 0;
+}
+
+.chat-widget__edge--e,
+.chat-widget__edge--w {
+  top: 12px;
+  bottom: 12px;
+  width: 6px;
+  cursor: ew-resize;
+}
+
+.chat-widget__edge--e {
+  right: 0;
+}
+
+.chat-widget__edge--w {
+  left: 0;
+}
+
+.chat-widget__edge--ne,
+.chat-widget__edge--nw,
+.chat-widget__edge--se,
+.chat-widget__edge--sw {
+  width: 12px;
+  height: 12px;
+}
+
+.chat-widget__edge--nw {
+  top: 0;
+  left: 0;
+  cursor: nwse-resize;
+}
+
+.chat-widget__edge--ne {
+  top: 0;
+  right: 0;
+  cursor: nesw-resize;
+}
+
+.chat-widget__edge--sw {
+  bottom: 0;
+  left: 0;
+  cursor: nesw-resize;
+}
+
+.chat-widget__edge--se {
+  bottom: 0;
+  right: 0;
+  cursor: nwse-resize;
+}
+
+/* The visible grip on the top-left corner, over the dark header: two short
+   diagonal strokes, like a window's resize grip. It's also the keyboard
+   handle (arrows resize, Shift+arrows move). */
+.chat-widget__grip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 3;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  background:
+    linear-gradient(135deg, transparent 5px, var(--sage-600) 5px, var(--sage-600) 6.5px, transparent 6.5px),
+    linear-gradient(135deg, transparent 9px, var(--sage-600) 9px, var(--sage-600) 10.5px, transparent 10.5px);
+  cursor: nwse-resize;
+  touch-action: none;
+}
+
+.chat-widget__grip:hover,
+.chat-widget__grip:focus-visible {
+  background:
+    linear-gradient(135deg, transparent 5px, var(--lantern-500) 5px, var(--lantern-500) 6.5px, transparent 6.5px),
+    linear-gradient(135deg, transparent 9px, var(--lantern-500) 9px, var(--lantern-500) 10.5px, transparent 10.5px);
+}
+
+.chat-widget__grip:focus-visible {
+  outline: 2px solid var(--lantern-500);
+  outline-offset: -2px;
+}
+
 .chat-widget__header {
+  cursor: move;
+  user-select: none;
+  touch-action: none;
   display: flex;
   align-items: center;
   gap: 0.75rem;
   padding: 0.75rem 1rem;
   background: var(--pine-950);
   color: var(--canvas-50);
+}
+
+/* Eddie | Herman, for signed-in employees (in place of the title). */
+.chat-widget__tabs {
+  display: flex;
+  flex: 1;
+  gap: 0.25rem;
+}
+
+.chat-widget__tab {
+  padding: 0.3rem 0.8rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--canvas-50);
+  font: inherit;
+  font-family: var(--font-display);
+  cursor: pointer;
+}
+
+.chat-widget__tab:hover {
+  border-color: var(--sage-600);
+}
+
+.chat-widget__tab[aria-selected='true'] {
+  background: var(--canvas-50);
+  color: var(--pine-950);
 }
 
 .chat-widget__title {
@@ -82,6 +237,11 @@
   min-height: 32px;
   font-size: 1.5rem;
   line-height: 1;
+}
+
+/* The expand button: the close button's shape, a smaller glyph. */
+.chat-widget__close.chat-widget__size {
+  font-size: 1.15rem;
 }
 
 .chat-widget__text-button:disabled {
@@ -185,6 +345,28 @@
   font-style: italic;
 }
 
+/* Employees only: switches to the Herman tab with this exchange (see
+   TEACH_TEXT). */
+.chat-widget__teach {
+  display: inline-block;
+  margin-top: 0.4rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--clay-700);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+  cursor: pointer;
+}
+
+.chat-widget__teach:hover {
+  color: var(--pine-900);
+}
+
 .chat-widget__typing {
   align-self: flex-start;
   margin: 0;
@@ -271,5 +453,25 @@
   .chat-widget__panel {
     width: 100%;
     max-height: calc(100vh - 6rem);
+  }
+
+  /* Phones: the window spans the screen, so it doesn't float, resize, or
+     move (lib/floatingWindow.js ignores drags here too). */
+  .chat-widget__panel--expanded,
+  .chat-widget__panel--free {
+    position: static;
+    width: 100%;
+    height: calc(100vh - 6rem);
+    height: calc(100dvh - 6rem);
+  }
+
+  .chat-widget__grip,
+  .chat-widget__edge {
+    display: none;
+  }
+
+  .chat-widget__header {
+    cursor: auto;
+    touch-action: auto;
   }
 }

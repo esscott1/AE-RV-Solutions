@@ -1,5 +1,5 @@
 // The three kinds of knowledge the Add Knowledge form offers, and the
-// Markdown each produces. The server (modules/employees/lambda/kb.py) builds
+// Markdown each produces. The server (modules/employees/lambda/knowledge_fields.py) builds
 // the real file from the same fields; buildMarkdown here only powers the
 // live preview, so keep the two in step.
 
@@ -93,11 +93,14 @@ export function validate(type, f) {
       if (tooLong(f[s.key])) return `“${s.label}” is over ${LIMITS.text} characters.`;
     }
   } else if (type === 'faq') {
+    // The form always has at least one; a draft from Herman may not.
+    if (f.pairs.length === 0) return 'Add at least one question.';
     for (const [i, p] of f.pairs.entries()) {
       if (!oneLine(p.question) || !String(p.answer ?? '').trim()) return `Question ${i + 1} needs a question and an answer.`;
       if (oneLine(p.question).length > LIMITS.question || tooLong(p.answer)) return `Question ${i + 1} is too long.`;
     }
   } else {
+    if (f.sections.length === 0) return 'Add at least one section.';
     for (const [i, s] of f.sections.entries()) {
       if (!oneLine(s.heading) || !String(s.body ?? '').trim()) return `Section ${i + 1} needs a heading and text.`;
       if (oneLine(s.heading).length > LIMITS.heading || tooLong(s.body)) return `Section ${i + 1} is too long.`;

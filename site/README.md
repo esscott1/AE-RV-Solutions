@@ -59,8 +59,35 @@ idle (about 70 KB gzipped, almost all React itself).
   on the server. The widget sends at most the last 8 messages, within the
   API's limits.
 - Replies are rendered from a small markdown subset (bold, lists, line
-  breaks) as React elements, never as HTML. Technician-referral and
-  emergency replies get a "Safety notice" style.
+  breaks) as React elements, never as HTML (`FormattedReply.jsx`, shared with
+  Herman). Technician-referral and emergency replies get a "Safety notice"
+  style.
+- **Signed-in employees** get **Eddie | Herman** tabs in the same window,
+  and a "Teach Eddie about this" link under each of Eddie's answers that
+  switches to Herman with that exchange. The tabs are display-only
+  (`src/lib/herman.js` looks for a sign-in session) and grant nothing:
+  Herman's API checks the employee's token.
+
+## Teaching Eddie with Herman
+
+Herman is the employee-only assistant on the employee API
+(`POST /assistant/chat`). He lives in the chat window's Herman tab
+(`HermanChat.jsx`). It's loaded on demand, with the sign-in library, only
+when an employee opens that tab, so customers never download it.
+
+- He interviews the employee, and his draft shows as a card in the chat,
+  updated each turn.
+- **Submit for review** on the card sends the draft through the same
+  `POST /kb/entries` as the Add Knowledge form, marked `origin: "chat"`, with
+  Herman's note for the reviewer if he wrote one.
+- **Edit in the form** opens `/add-knowledge/` with the draft filled in. The
+  form is otherwise unchanged: the kind-of-knowledge tiles and guided fields.
+- An admin approves or rejects it on KBValidation, which shows a "Drafted
+  with Herman" badge, the note, and the author's employee ID.
+- The conversation lives in `sessionStorage` (`ae-rv-kb-intake`) for the tab
+  only, up to Herman's 40-message limit.
+- Backend, prompts and eval: `infrastructure/README.md` → "Herman, the
+  employee assistant".
 
 ## Replacing the hero photo
 
