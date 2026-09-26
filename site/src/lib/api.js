@@ -217,8 +217,9 @@ async function knowledgeCall(method, path, idToken, body) {
   }
 }
 
-export const submitKnowledge = (idToken, type, fields) =>
-  knowledgeCall('POST', 'kb/entries', idToken, { type, fields });
+// `extra` is optional: {origin: 'chat', reviewNote} for a draft Herman wrote.
+export const submitKnowledge = (idToken, type, fields, extra = {}) =>
+  knowledgeCall('POST', 'kb/entries', idToken, { type, fields, ...extra });
 export const getMyKnowledge = (idToken) => knowledgeCall('GET', 'kb/entries/mine', idToken);
 export const getPendingKnowledge = (idToken) => knowledgeCall('GET', 'kb/entries/pending', idToken);
 // `fields` is optional: pass edited fields to publish the admin's version.
@@ -230,3 +231,10 @@ export const getKnowledgeDocuments = (idToken) => knowledgeCall('GET', 'kb/docum
 export const removeKnowledge = (idToken, id) =>
   knowledgeCall('DELETE', `kb/documents/${encodeURIComponent(id)}`, idToken);
 export const reindexKnowledge = (idToken) => knowledgeCall('POST', 'kb/sync', idToken, {});
+
+// Herman, the employee assistant (POST /assistant/chat). Stateless: send the
+// whole conversation, the current draft, and the Eddie chat it started from
+// (if any) every turn. `data` is {reply, draft, ready, missing, reviewNote}.
+// Same statuses as the knowledge calls.
+export const assistantChat = (idToken, { mode, messages, draft = null, seed = null }) =>
+  knowledgeCall('POST', 'assistant/chat', idToken, { mode, messages, draft, seed });

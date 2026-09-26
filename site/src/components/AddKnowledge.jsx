@@ -3,12 +3,17 @@ import { signIn } from '../lib/auth.js';
 import { getMyKnowledge, submitKnowledge } from '../lib/api.js';
 import { TYPES, WRITING_TIPS, emptyFields, validate } from '../lib/knowledge.js';
 import { useEmployee } from '../lib/useEmployee.js';
+import KnowledgeChat from './KnowledgeChat.jsx';
 import { Gate, KnowledgeForm, Preview, formatDate } from './KnowledgeForm.jsx';
 
 // /add-knowledge/: any employee submits knowledge for an admin to review on
-// KBValidation. Nothing reaches Eddie until it's approved.
+// KBValidation, by chatting with Herman (the default) or with the form.
+// Nothing reaches Eddie until it's approved.
+const SUBMITTED_TEXT = 'Submitted. An admin will review it on KBValidation before Eddie uses it.';
+
 export default function AddKnowledge() {
   const employee = useEmployee();
+  const [mode, setMode] = useState('chat');
   const [type, setType] = useState(null);
   const [fields, setFields] = useState(null);
   const [message, setMessage] = useState(null);
@@ -39,7 +44,7 @@ export default function AddKnowledge() {
     const result = await submitKnowledge(token, type, fields);
     setBusy(false);
     if (result.status === 'ok') {
-      setMessage({ kind: 'ok', text: 'Submitted. An admin will review it on KBValidation before Eddie uses it.' });
+      setMessage({ kind: 'ok', text: SUBMITTED_TEXT });
       setType(null);
       setFields(null);
       loadMine();
@@ -59,44 +64,78 @@ export default function AddKnowledge() {
           Teach Eddie something from your experience. An admin reviews every entry before Eddie uses it.
         </p>
 
-        <fieldset className="knowledge__types">
-          <legend className="knowledge__label">What kind of knowledge is it?</legend>
-          {Object.entries(TYPES).map(([key, info]) => (
-            <label key={key} className="knowledge__type" data-selected={type === key}>
-              <input
-                type="radio"
-                name="knowledge-type"
-                className="knowledge__sr-only"
-                checked={type === key}
-                onChange={() => pick(key)}
-              />
-              <span className="knowledge__type-name">{info.label}</span>
-              <span className="knowledge__type-card">{info.card}</span>
-              <span className="knowledge__type-eddie">Eddie: {info.eddie}</span>
-            </label>
-          ))}
-        </fieldset>
-        <p className="knowledge__hint">
-          Not sure? If a customer would ask “how do I…”, it’s a Capability. A quick question with a quick answer is
-          an FAQ. Anything else is a Note.
-        </p>
-
-        {type && (
-          <form className="knowledge__compose" onSubmit={submit}>
-            <details className="knowledge__tips">
-              <summary>Writing tips</summary>
-              <ul>
-                {WRITING_TIPS.map((tip) => (
-                  <li key={tip}>{tip}</li>
-                ))}
-              </ul>
-            </details>
-            <KnowledgeForm type={type} fields={fields} onChange={setFields} disabled={busy} />
-            <Preview type={type} fields={fields} />
-            <button type="submit" className="knowledge__button" disabled={busy}>
-              {busy ? 'Submitting…' : 'Submit for review'}
+        <div className="knowledge__modes" role="group" aria-label="How do you want to add it?">
+          {[
+            ['chat', 'Chat with Herman'],
+            ['form', 'Fill in the form'],
+          ].map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              className={`knowledge__button${mode === key ? '' : ' knowledge__button--quiet'}`}
+              aria-pressed={mode === key}
+              onClick={() => {
+                setMode(key);
+                setMessage(null);
+              }}
+            >
+              {label}
             </button>
-          </form>
+          ))}
+        </div>
+
+        {mode === 'chat' && (
+          <KnowledgeChat
+            token={token}
+            onSubmitted={() => {
+              setMessage({ kind: 'ok', text: SUBMITTED_TEXT });
+              loadMine();
+            }}
+          />
+        )}
+
+        {mode === 'form' && (
+          <>
+            <fieldset className="knowledge__types">
+              <legend className="knowledge__label">What kind of knowledge is it?</legend>
+              {Object.entries(TYPES).map(([key, info]) => (
+                <label key={key} className="knowledge__type" data-selected={type === key}>
+                  <input
+                    type="radio"
+                    name="knowledge-type"
+                    className="knowledge__sr-only"
+                    checked={type === key}
+                    onChange={() => pick(key)}
+                  />
+                  <span className="knowledge__type-name">{info.label}</span>
+                  <span className="knowledge__type-card">{info.card}</span>
+                  <span className="knowledge__type-eddie">Eddie: {info.eddie}</span>
+                </label>
+              ))}
+            </fieldset>
+            <p className="knowledge__hint">
+              Not sure? If a customer would ask “how do I…”, it’s a Capability. A quick question with a quick answer is
+              an FAQ. Anything else is a Note.
+            </p>
+
+            {type && (
+              <form className="knowledge__compose" onSubmit={submit}>
+                <details className="knowledge__tips">
+                  <summary>Writing tips</summary>
+                  <ul>
+                    {WRITING_TIPS.map((tip) => (
+                      <li key={tip}>{tip}</li>
+                    ))}
+                  </ul>
+                </details>
+                <KnowledgeForm type={type} fields={fields} onChange={setFields} disabled={busy} />
+                <Preview type={type} fields={fields} />
+                <button type="submit" className="knowledge__button" disabled={busy}>
+                  {busy ? 'Submitting…' : 'Submit for review'}
+                </button>
+              </form>
+            )}
+          </>
         )}
         {message && (
           <p className={`knowledge__message knowledge__message--${message.kind}`} role="status">

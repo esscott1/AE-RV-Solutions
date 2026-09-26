@@ -134,8 +134,9 @@ export default function KBViewer() {
                     >
                       <span aria-hidden="true">{open.has(doc.id) ? '▾' : '▸'}</span> <strong>{doc.title}</strong>
                     </button>
-                    <span className="knowledge__muted">
-                      {doc.author ? `by ${doc.author} · ` : ''}updated {formatDate(doc.updatedAt)}
+                    <span className="knowledge__muted" title={doc.authorSub ? `Employee ID ${doc.authorSub}` : undefined}>
+                      {doc.author ? `by ${doc.author} · ` : ''}
+                      {doc.origin === 'chat' ? 'drafted with Herman · ' : ''}updated {formatDate(doc.updatedAt)}
                     </span>
                     <span className="knowledge__actions">
                       <button

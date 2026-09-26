@@ -185,6 +185,19 @@
   font-style: italic;
 }
 
+/* Employees only: opens Herman with this exchange (see TEACH_TEXT). */
+.chat-widget__teach {
+  display: inline-block;
+  margin-top: 0.4rem;
+  color: var(--clay-700);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.chat-widget__teach:hover {
+  color: var(--pine-900);
+}
+
 .chat-widget__typing {
   align-self: flex-start;
   margin: 0;

@@ -1,0 +1,162 @@
+/* Styles for KnowledgeChat (Add Knowledge's chat with Herman). Every class is
+   prefixed .knowledge-chat__ because an island's CSS is global (CLAUDE.md).
+   Buttons, inputs and the preview reuse the .knowledge__ classes from
+   Knowledge.css. Colours come from the tokens in src/styles/global.css. */
+
+.knowledge-chat {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.knowledge-chat__conversation,
+.knowledge-chat__draft {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.knowledge-chat__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+}
+
+.knowledge-chat__intro {
+  color: var(--pine-900);
+}
+
+/* The Eddie exchange this chat started from. */
+.knowledge-chat__seed {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.75rem 1rem;
+  border-left: 4px solid var(--lantern-500);
+  border-radius: 8px;
+  background: var(--canvas-100);
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
+.knowledge-chat__seed-title,
+.knowledge-chat__draft-title {
+  color: var(--sage-600);
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.knowledge-chat__messages {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-height: 12rem;
+  max-height: 32rem;
+  overflow-y: auto;
+  padding: 1rem;
+  border: 1px solid var(--sage-200);
+  border-radius: 12px;
+  background: var(--canvas-50);
+}
+
+.knowledge-chat__message {
+  max-width: 88%;
+  padding: 0.6rem 0.8rem;
+  border-radius: 10px;
+  color: var(--pine-950);
+  font-size: 0.95rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.knowledge-chat__message p,
+.knowledge-chat__message ul,
+.knowledge-chat__message ol {
+  margin: 0;
+}
+
+.knowledge-chat__message p + p,
+.knowledge-chat__message p + ul,
+.knowledge-chat__message p + ol,
+.knowledge-chat__message ul + p,
+.knowledge-chat__message ol + p {
+  margin-top: 0.5rem;
+}
+
+.knowledge-chat__message ul,
+.knowledge-chat__message ol {
+  padding-left: 1.2rem;
+}
+
+.knowledge-chat__message--user {
+  align-self: flex-end;
+  background: var(--sage-200);
+  white-space: pre-wrap;
+}
+
+.knowledge-chat__message--assistant {
+  align-self: flex-start;
+  background: var(--canvas-100);
+}
+
+.knowledge-chat__typing {
+  align-self: flex-start;
+  padding: 0.4rem 0.8rem;
+  border-radius: 10px;
+  background: var(--canvas-100);
+  color: var(--sage-600);
+  letter-spacing: 0.2em;
+}
+
+.knowledge-chat__form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.knowledge-chat__input {
+  min-height: 4.5rem;
+}
+
+.knowledge-chat__form-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+.knowledge-chat__form-row .knowledge__button {
+  align-self: auto;
+}
+
+.knowledge-chat__missing {
+  padding: 0.75rem 1rem;
+  border-radius: 10px;
+  background: var(--canvas-100);
+  font-size: 0.9rem;
+}
+
+.knowledge-chat__missing ul {
+  margin: 0.35rem 0 0;
+  padding-left: 1.25rem;
+}
+
+.knowledge-chat__note {
+  padding: 0.6rem 0.9rem;
+  border-left: 4px solid var(--clay-700);
+  border-radius: 8px;
+  background: var(--canvas-100);
+  font-size: 0.9rem;
+}
+
+@media (max-width: 900px) {
+  .knowledge-chat {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
