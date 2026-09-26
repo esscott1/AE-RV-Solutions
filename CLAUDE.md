@@ -170,3 +170,18 @@ stop and ask. This also covers approving environment deployments (e.g.
 Both PR workflows run on every PR and skip their real work when their paths
 are untouched, because a path-filtered required check would never start and
 would block the PR.
+
+**Offer local testing before asking to merge.** Whenever a PR's change can
+be tried locally, offer that before asking for the merge OK, so the user can
+see and click through it before it deploys. Checks that could be done
+locally never get deferred to "after deploy".
+- Site changes: `npm run dev` in `site/` (http://localhost:4321). `site/.env`
+  holds the chat and Cognito `PUBLIC_*` values, and localhost:4321 is an
+  allowed sign-in callback and employee API origin. Stop the server with
+  `npx astro dev stop`.
+- Local testing uses the live production APIs. Say so, and point out the
+  side effects: test submissions land in the real knowledge review queue
+  (reject them afterwards), and Eddie chats count against his daily quota.
+- Infrastructure changes usually can't run locally. Offer whatever does
+  apply, such as unit tests with AWS stubbed out, or the chatbot and Herman
+  evals against the local prompts.
