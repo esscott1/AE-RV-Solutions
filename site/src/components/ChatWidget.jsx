@@ -17,8 +17,15 @@ const COUNTER_FROM = 400;
 
 const STORAGE_KEY = 'ae-rv-chat';
 const CONVERSATION_ID_KEY = 'ae-rv-chat-id';
-// The window size the visitor last picked with the expand button, if any.
+// The window size the visitor last picked: 'compact' or 'expanded' (the
+// expand button), or {width, height} in pixels (dragged with the corner
+// handle).
 const SIZE_KEY = 'ae-rv-chat-size';
+// Dragging can't make the window smaller than this (px).
+const MIN_WIDTH = 300;
+const MIN_HEIGHT = 320;
+// Arrow keys on the handle resize by this much (px).
+const KEY_STEP = 40;
 const OFFLINE_TEXT = 'Chat is offline right now. Please contact us directly.';
 const NOTICE_TEXT =
   'AI assistant. For electrical or battery hazards, contact a technician. Automated or bulk access is not permitted.';
@@ -94,19 +101,34 @@ function saveConversationId(id) {
 
 function loadSize() {
   try {
-    const saved = sessionStorage.getItem(SIZE_KEY);
-    return saved === 'expanded' || saved === 'compact' ? saved : null;
+    const saved = JSON.parse(sessionStorage.getItem(SIZE_KEY) ?? 'null');
+    if (saved === 'expanded' || saved === 'compact') return saved;
+    if (Number.isFinite(saved?.width) && Number.isFinite(saved?.height)) {
+      return { width: saved.width, height: saved.height };
+    }
   } catch {
-    return null;
+    // Storage blocked or unreadable: use the default size.
   }
+  return null;
 }
 
 function saveSize(size) {
   try {
-    if (size) sessionStorage.setItem(SIZE_KEY, size);
+    if (size) sessionStorage.setItem(SIZE_KEY, JSON.stringify(size));
   } catch {
     // Storage blocked: the size just resets on the next page.
   }
+}
+
+// A dragged size, kept within the minimum and the space the window has on
+// screen (it sits 1.25rem from the right and above the launcher).
+function clampSize(width, height) {
+  const maxWidth = Math.max(MIN_WIDTH, window.innerWidth - 40);
+  const maxHeight = Math.max(MIN_HEIGHT, window.innerHeight - 112);
+  return {
+    width: Math.round(Math.min(maxWidth, Math.max(MIN_WIDTH, width))),
+    height: Math.round(Math.min(maxHeight, Math.max(MIN_HEIGHT, height))),
+  };
 }
 
 function saveConversation(messages) {
@@ -136,9 +158,11 @@ export default function ChatWidget() {
   const [tab, setTab] = useState('eddie'); // eddie | herman (employees only)
   // An Eddie exchange handed to Herman by "Teach Eddie about this".
   const [teachSeed, setTeachSeed] = useState(null);
-  // null until the visitor uses the expand button. Until then, Herman's tab
+  // null until the visitor resizes the window. Until then, Herman's tab
   // opens large (his drafts need the room) and Eddie's stays compact.
   const [size, setSize] = useState(loadSize);
+  const panelRef = useRef(null);
+  const dragRef = useRef(null);
 
   const panelId = useId();
   const launcherRef = useRef(null);
@@ -157,6 +181,21 @@ export default function ChatWidget() {
   useEffect(() => {
     saveSize(size);
   }, [size]);
+
+  // A dragged size reaches the stylesheet as two CSS variables
+  // (--chat-widget-width/-height, used by .chat-widget__panel--sized): a size
+  // the visitor drags to can't be written in the stylesheet ahead of time.
+  useEffect(() => {
+    const panel = panelRef.current;
+    if (!panel) return;
+    if (size && typeof size === 'object') {
+      panel.style.setProperty('--chat-widget-width', `${size.width}px`);
+      panel.style.setProperty('--chat-widget-height', `${size.height}px`);
+    } else {
+      panel.style.removeProperty('--chat-widget-width');
+      panel.style.removeProperty('--chat-widget-height');
+    }
+  }, [open, size]);
 
   // Keep the newest message (or the typing indicator) in view.
   useEffect(() => {
@@ -220,19 +259,70 @@ export default function ChatWidget() {
     if (event.key === 'Escape') close();
   }
 
+  // The corner handle: the window is pinned bottom-right, so dragging the
+  // top-left corner up or left makes it bigger. During a drag the variables
+  // are set directly; the final size is saved when the pointer is released.
+  function onGripPointerDown(event) {
+    const panel = panelRef.current;
+    if (!panel || event.button !== 0) return;
+    event.preventDefault();
+    const rect = panel.getBoundingClientRect();
+    dragRef.current = { x: event.clientX, y: event.clientY, width: rect.width, height: rect.height };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setSize(clampSize(rect.width, rect.height));
+  }
+
+  function onGripPointerMove(event) {
+    const drag = dragRef.current;
+    if (!drag) return;
+    const next = clampSize(drag.width + drag.x - event.clientX, drag.height + drag.y - event.clientY);
+    panelRef.current?.style.setProperty('--chat-widget-width', `${next.width}px`);
+    panelRef.current?.style.setProperty('--chat-widget-height', `${next.height}px`);
+    drag.last = next;
+  }
+
+  function onGripPointerUp() {
+    const drag = dragRef.current;
+    dragRef.current = null;
+    if (drag?.last) setSize(drag.last);
+  }
+
+  function onGripKeyDown(event) {
+    const deltas = { ArrowLeft: [KEY_STEP, 0], ArrowRight: [-KEY_STEP, 0], ArrowUp: [0, KEY_STEP], ArrowDown: [0, -KEY_STEP] };
+    const delta = deltas[event.key];
+    const rect = panelRef.current?.getBoundingClientRect();
+    if (!delta || !rect) return;
+    event.preventDefault();
+    setSize(clampSize(rect.width + delta[0], rect.height + delta[1]));
+  }
+
   const eddieTab = tab === 'eddie';
+  const dragged = Boolean(size) && typeof size === 'object';
   const expanded = size ? size === 'expanded' : !eddieTab;
+  const sizeClass = dragged ? ' chat-widget__panel--sized' : expanded ? ' chat-widget__panel--expanded' : '';
 
   return (
     <div className="chat-widget">
       {open && (
         <div
           id={panelId}
-          className={`chat-widget__panel${expanded ? ' chat-widget__panel--expanded' : ''}`}
+          ref={panelRef}
+          className={`chat-widget__panel${sizeClass}`}
           role="dialog"
           aria-label="A&E RV Solutions assistant"
           onKeyDown={onPanelKeyDown}
         >
+          <button
+            type="button"
+            className="chat-widget__grip"
+            aria-label="Resize the chat window: drag, or use the arrow keys"
+            title="Drag to resize"
+            onPointerDown={onGripPointerDown}
+            onPointerMove={onGripPointerMove}
+            onPointerUp={onGripPointerUp}
+            onPointerCancel={onGripPointerUp}
+            onKeyDown={onGripKeyDown}
+          />
           <div className="chat-widget__header">
             {employee ? (
               <div className="chat-widget__tabs" role="tablist" aria-label="Assistants">
@@ -271,12 +361,12 @@ export default function ChatWidget() {
             <button
               type="button"
               className="chat-widget__close chat-widget__size"
-              onClick={() => setSize(expanded ? 'compact' : 'expanded')}
-              aria-label={expanded ? 'Make the chat window smaller' : 'Make the chat window larger'}
-              aria-pressed={expanded}
-              title={expanded ? 'Smaller' : 'Larger'}
+              onClick={() => setSize(expanded || dragged ? 'compact' : 'expanded')}
+              aria-label={expanded || dragged ? 'Make the chat window small' : 'Make the chat window large'}
+              aria-pressed={expanded || dragged}
+              title={expanded || dragged ? 'Small' : 'Large'}
             >
-              <span aria-hidden="true">{expanded ? '⤡' : '⤢'}</span>
+              <span aria-hidden="true">{expanded || dragged ? '⤡' : '⤢'}</span>
             </button>
             <button
               type="button"
