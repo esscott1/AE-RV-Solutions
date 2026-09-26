@@ -1,11 +1,13 @@
 import { Fragment, useEffect, useState } from 'react';
 import { currentUser, signIn, signInConfigured } from '../lib/auth.js';
-import { getAdminConversations, getAdminUsage } from '../lib/api.js';
+import { getAdminConversations, getAdminUsage, getHermanUsage } from '../lib/api.js';
 import './AdminPanel.css';
 
-// The /ai-stats/ page ("AI Stats"): Eddie's usage and chat conversations, for the admins
-// group. Everything comes from the employee API's admin routes, which check
-// the group themselves; this page only decides what to show.
+// The /ai-stats/ page ("AI Stats"): Eddie's usage and chat conversations, and
+// Herman's usage, for the admins group. Everything comes from the employee
+// API's admin routes, which check the group themselves; this page only decides
+// what to show. Herman's usage is read from his logs and can fail on its own:
+// then only his section says so.
 
 const RANGES = [7, 30];
 const SAFETY_ROUTES = ['safety_referral', 'emergency'];
@@ -29,12 +31,35 @@ const money = (value) =>
   }).format(value);
 const dateTime = (iso) =>
   iso ? new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '';
+// Milliseconds as seconds, e.g. "4.0 s"; a {median, max} pair as "4.0 s / 6.1 s".
+const seconds = (ms) => `${(ms / 1000).toFixed(1)} s`;
+const timing = (t) => (t ? `${seconds(t.median)} / ${seconds(t.max)}` : '—');
+// Costs from Herman's usage can be null: a model with no price. Never shown as $0.
+const maybeMoney = (value) => (value == null ? 'Unknown' : money(value));
+const MODEL_LABELS = {
+  'us.anthropic.claude-haiku-4-5-20251001-v1:0': 'Claude Haiku 4.5',
+};
+const modelLabel = (id) => MODEL_LABELS[id] ?? id;
 const shortDay = (ymd) =>
   new Date(`${ymd}T00:00:00Z`).toLocaleDateString(undefined, {
     month: 'short',
     day: 'numeric',
     timeZone: 'UTC',
   });
+
+// One exchange's step timings: "4.0 s (classify 1.7 s · search 0.5 s · answer 1.7 s)".
+// Steps that didn't run (null) are left out; older transcripts have no timings.
+function exchangeTiming(t) {
+  if (!t?.totalMs) return null;
+  const steps = [
+    ['classify', t.classifyMs],
+    ['search', t.retrieveMs],
+    ['answer', t.answerMs],
+  ]
+    .filter(([, ms]) => ms != null)
+    .map(([name, ms]) => `${name} ${seconds(ms)}`);
+  return `${seconds(t.totalMs)}${steps.length ? ` (${steps.join(' · ')})` : ''}`;
+}
 
 function routeSummary(routes) {
   return Object.entries(routes)
@@ -50,6 +75,8 @@ export default function AdminPanel() {
   const [days, setDays] = useState(7);
   const [usage, setUsage] = useState(null);
   const [conversations, setConversations] = useState(null);
+  // {status: 'ok', data} or {status: 'error'}: loaded with Eddie's, shown separately.
+  const [herman, setHerman] = useState(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -69,21 +96,25 @@ export default function AdminPanel() {
     if (!user) return;
     let cancelled = false;
     setBusy(true);
-    Promise.all([getAdminUsage(user.id_token, days), getAdminConversations(user.id_token, days)]).then(
-      ([u, c]) => {
-        if (cancelled) return;
-        setBusy(false);
-        const worst = [u.status, c.status].find((s) => s !== 'ok');
-        if (worst === 'unauthorized') setStatus('signedOut');
-        else if (worst === 'forbidden') setStatus('forbidden');
-        else if (worst) setStatus('error');
-        else {
-          setUsage(u.data);
-          setConversations(c.data);
-          setStatus('ready');
-        }
-      },
-    );
+    Promise.all([
+      getAdminUsage(user.id_token, days),
+      getAdminConversations(user.id_token, days),
+      getHermanUsage(user.id_token, days),
+    ]).then(([u, c, h]) => {
+      if (cancelled) return;
+      setBusy(false);
+      // Eddie's data decides the page; Herman's only decides his own section.
+      const worst = [u.status, c.status].find((s) => s !== 'ok');
+      if (worst === 'unauthorized') setStatus('signedOut');
+      else if (worst === 'forbidden') setStatus('forbidden');
+      else if (worst) setStatus('error');
+      else {
+        setUsage(u.data);
+        setConversations(c.data);
+        setHerman(h.status === 'ok' ? h : { status: 'error' });
+        setStatus('ready');
+      }
+    });
     return () => {
       cancelled = true;
     };
@@ -157,14 +188,43 @@ export default function AdminPanel() {
         </div>
       </div>
       <p className="admin-panel__muted">
-        Days are UTC. Costs are estimates of Bedrock model cost at{' '}
-        {money(usage.prices.inputPerMillion)} / {money(usage.prices.outputPerMillion)} per million
-        input / output tokens.
+        Days are UTC. Costs are estimates of Bedrock model cost only.
         {busy && ' Updating…'}
       </p>
+      <Overview usage={usage} herman={herman} />
       <Usage usage={usage} />
       <Conversations data={conversations} />
+      <Herman herman={herman} />
     </div>
+  );
+}
+
+function Tiles({ tiles }) {
+  return (
+    <dl className="admin-panel__tiles">
+      {tiles.map(([label, value]) => (
+        <div className="admin-panel__tile" key={label}>
+          <dt className="admin-panel__tile-label">{label}</dt>
+          <dd className="admin-panel__tile-value">{value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+// Both assistants' estimated cost together. If Herman's usage couldn't be
+// loaded, or includes a model with no price, the total is unknown, not Eddie's alone.
+function Overview({ usage, herman }) {
+  const hermanCost = herman.status === 'ok' ? herman.data.totals.cost : null;
+  const total = hermanCost == null ? null : usage.totals.cost + hermanCost;
+  return (
+    <Tiles
+      tiles={[
+        ['Total AI cost (Eddie + Herman)', maybeMoney(total)],
+        ['Eddie', money(usage.totals.cost)],
+        ['Herman', maybeMoney(hermanCost)],
+      ]}
+    />
   );
 }
 
@@ -177,21 +237,20 @@ function Usage({ usage }) {
     ['Safety referrals', count.format(safety)],
     ['Tokens (in / out)', `${count.format(totals.tokensIn)} / ${count.format(totals.tokensOut)}`],
     ['Estimated cost', money(totals.cost)],
+    ['Response time (median / slowest)', timing(totals.responseMs)],
   ];
 
   return (
     <section className="admin-panel__section" aria-labelledby="admin-usage">
       <h2 className="admin-panel__subtitle" id="admin-usage">
-        AI usage
+        Eddie, the public chat
       </h2>
-      <dl className="admin-panel__tiles">
-        {tiles.map(([label, value]) => (
-          <div className="admin-panel__tile" key={label}>
-            <dt className="admin-panel__tile-label">{label}</dt>
-            <dd className="admin-panel__tile-value">{value}</dd>
-          </div>
-        ))}
-      </dl>
+      <p className="admin-panel__muted">
+        Priced at {money(usage.prices.inputPerMillion)} / {money(usage.prices.outputPerMillion)} per
+        million input / output tokens. Response time is from the question reaching AWS to his reply,
+        so it leaves out the visitor’s network; exchanges before Sept 26, 2026 weren’t timed.
+      </p>
+      <Tiles tiles={tiles} />
       <DailyChart rows={usage.days} />
       <div className="admin-panel__table-wrap">
         <table className="admin-panel__table">
@@ -204,6 +263,7 @@ function Usage({ usage }) {
               <th scope="col">Routes</th>
               <th scope="col">Tokens (in / out)</th>
               <th scope="col">Est. cost</th>
+              <th scope="col">Response time (median / slowest)</th>
             </tr>
           </thead>
           <tbody>
@@ -220,6 +280,7 @@ function Usage({ usage }) {
                   {count.format(row.tokensIn)} / {count.format(row.tokensOut)}
                 </td>
                 <td>{money(row.cost)}</td>
+                <td>{timing(row.responseMs)}</td>
               </tr>
             ))}
           </tbody>
@@ -402,6 +463,7 @@ function Conversations({ data }) {
                                   {e.source ? ` (${e.source.replace('_', ' ')})` : ''} ·{' '}
                                   {count.format(e.tokensIn)} / {count.format(e.tokensOut)} tokens ·{' '}
                                   {money(e.cost)}
+                                  {exchangeTiming(e.timings) && ` · ${exchangeTiming(e.timings)}`}
                                 </p>
                                 <p className="admin-panel__said">
                                   <strong>Visitor:</strong> {e.message}
@@ -418,6 +480,156 @@ function Conversations({ data }) {
                   </Fragment>
                 );
               })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
+// Herman, the employee assistant. He keeps no transcripts, so this is counts,
+// cost and timings only, from one log line per chat turn (kept 30 days).
+function Herman({ herman }) {
+  const heading = (
+    <h2 className="admin-panel__subtitle" id="admin-herman">
+      Herman, the employee assistant
+    </h2>
+  );
+
+  if (herman.status !== 'ok') {
+    return (
+      <section className="admin-panel__section" aria-labelledby="admin-herman">
+        {heading}
+        <p className="admin-panel__error" role="alert">
+          Herman’s usage couldn’t be loaded. Eddie’s stats above are unaffected; try again shortly.
+        </p>
+      </section>
+    );
+  }
+
+  const { totals, days, byModel, employees, prices, truncated } = herman.data;
+  const priceNote = Object.entries(prices)
+    .map(
+      ([model, p]) =>
+        `${modelLabel(model)} at ${money(p.inputPerMillion)} / ${money(p.outputPerMillion)}`,
+    )
+    .join('; ');
+
+  return (
+    <section className="admin-panel__section" aria-labelledby="admin-herman">
+      {heading}
+      <p className="admin-panel__muted">
+        Priced per model: {priceNote} per million input / output tokens. Response time is his whole
+        turn; Bedrock time is the model’s part of it. A turn has to finish within 30 seconds. His
+        logs go back 30 days, and turns before Sept 26, 2026 weren’t timed.
+        {truncated && ' This range has more turns than one query returns, so the counts are partial.'}
+      </p>
+      <Tiles
+        tiles={[
+          ['Chat turns', count.format(totals.turns)],
+          ['Employees', count.format(totals.employees)],
+          ['Tokens (in / out)', `${count.format(totals.tokensIn)} / ${count.format(totals.tokensOut)}`],
+          ['Estimated cost', maybeMoney(totals.cost)],
+          ['Response time (median / slowest)', timing(totals.totalMs)],
+          ['Bedrock time (median / slowest)', timing(totals.bedrockMs)],
+        ]}
+      />
+
+      <div className="admin-panel__table-wrap">
+        <table className="admin-panel__table">
+          <caption className="admin-panel__caption">Per day</caption>
+          <thead>
+            <tr>
+              <th scope="col">Day</th>
+              <th scope="col">Chat turns</th>
+              <th scope="col">Employees</th>
+              <th scope="col">Switched off / errors</th>
+              <th scope="col">Tokens (in / out)</th>
+              <th scope="col">Est. cost</th>
+              <th scope="col">Response time (median / slowest)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {[...days].reverse().map((row) => (
+              <tr key={row.date}>
+                <th scope="row">{shortDay(row.date)}</th>
+                <td>{count.format(row.turns)}</td>
+                <td>{count.format(row.employees)}</td>
+                <td>
+                  {count.format(row.off)} / {count.format(row.errors)}
+                </td>
+                <td>
+                  {count.format(row.tokensIn)} / {count.format(row.tokensOut)}
+                </td>
+                <td>{maybeMoney(row.cost)}</td>
+                <td>{timing(row.totalMs)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {byModel.length > 0 && (
+        <div className="admin-panel__table-wrap">
+          <table className="admin-panel__table">
+            <caption className="admin-panel__caption">Per model</caption>
+            <thead>
+              <tr>
+                <th scope="col">Model</th>
+                <th scope="col">Chat turns</th>
+                <th scope="col">Tokens (in / out)</th>
+                <th scope="col">Est. cost</th>
+                <th scope="col">Response time (median / slowest)</th>
+                <th scope="col">Bedrock time (median / slowest)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {byModel.map((m) => (
+                <tr key={m.model}>
+                  <th scope="row">{modelLabel(m.model)}</th>
+                  <td>{count.format(m.turns)}</td>
+                  <td>
+                    {count.format(m.tokensIn)} / {count.format(m.tokensOut)}
+                  </td>
+                  <td>{maybeMoney(m.cost)}</td>
+                  <td>{timing(m.totalMs)}</td>
+                  <td>{timing(m.bedrockMs)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {employees.length === 0 ? (
+        <p>No one chatted with Herman in this range.</p>
+      ) : (
+        <div className="admin-panel__table-wrap">
+          <table className="admin-panel__table">
+            <caption className="admin-panel__caption">Per employee, highest cost first</caption>
+            <thead>
+              <tr>
+                <th scope="col">Employee</th>
+                <th scope="col">Chat turns</th>
+                <th scope="col">Tokens (in / out)</th>
+                <th scope="col">Est. cost</th>
+              </tr>
+            </thead>
+            <tbody>
+              {employees.map((p) => (
+                <tr key={p.sub}>
+                  {/* Turns logged before emails were recorded show the sign-in ID instead. */}
+                  <th scope="row" className="admin-panel__who">
+                    {p.email ?? p.sub}
+                  </th>
+                  <td>{count.format(p.turns)}</td>
+                  <td>
+                    {count.format(p.tokensIn)} / {count.format(p.tokensOut)}
+                  </td>
+                  <td>{maybeMoney(p.cost)}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
@@ -459,6 +671,7 @@ function downloadCsv(data) {
     'Input tokens',
     'Output tokens',
     'Estimated cost (USD)',
+    'Response time (ms)',
   ];
   const rows = [...data.conversations]
     .sort((a, b) => (a.start ?? '').localeCompare(b.start ?? ''))
@@ -474,6 +687,7 @@ function downloadCsv(data) {
         e.tokensIn,
         e.tokensOut,
         e.cost,
+        e.timings?.totalMs ?? '',
       ]),
     );
   const text = [header, ...rows].map((row) => row.map(csvCell).join(',')).join('\r\n');
