@@ -155,6 +155,14 @@ data "aws_iam_policy_document" "admin" {
     actions   = ["logs:GetQueryResults", "logs:StopQuery"]
     resources = ["*"]
   }
+
+  # Herman's usage shows each employee's current email, looked up by sub in
+  # the employee pool only.
+  statement {
+    sid       = "LookUpEmployees"
+    actions   = ["cognito-idp:ListUsers"]
+    resources = [aws_cognito_user_pool.employees.arn]
+  }
 }
 
 resource "aws_iam_role_policy" "admin" {
@@ -201,6 +209,8 @@ resource "aws_lambda_function" "admin" {
       HERMAN_LOG_GROUP = aws_cloudwatch_log_group.assistant.name
       HERMAN_MODEL     = local.herman_model
       HERMAN_PRICES    = jsonencode({ (local.herman_model) = [var.price_per_mtok_input, var.price_per_mtok_output] })
+      # Where herman_usage.py looks up each employee's current email.
+      USER_POOL_ID = aws_cognito_user_pool.employees.id
     }
   }
 
