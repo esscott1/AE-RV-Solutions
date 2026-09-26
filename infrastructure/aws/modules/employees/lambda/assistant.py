@@ -26,12 +26,15 @@ change takes effect at once. When it's off, or can't be read, chat answers
 503 before any model call.
 
 Stateless, like Eddie: the browser sends the conversation and the current
-draft every turn. Logs the caller's ID, the mode, and token counts, never
-content.
+draft every turn. Each chat turn logs one JSON line: the caller's ID and
+email, the mode, the model, token counts, and response times (bedrockMs,
+Bedrock's own processing time; totalMs, the whole turn), never content. The
+admin AI Stats page reads these lines (herman_usage.py).
 """
 
 import json
 import os
+import time
 
 import boto3
 from botocore.config import Config
@@ -41,6 +44,9 @@ import herman
 from claims import BadRequest, claims_of, parse_body, parse_groups, respond
 
 MODEL_ID = os.environ["MODEL_ID"]
+# The inference profile's ID (after the ARN's last /), logged with each turn
+# so AI Stats can price it.
+MODEL = MODEL_ID.rsplit("/", 1)[-1]
 FLAG = os.environ["HERMAN_FLAG"]
 CHAT = "POST /assistant/chat"
 STATUS = "GET /assistant/status"
@@ -55,6 +61,16 @@ ssm = boto3.client("ssm")
 
 UNAVAILABLE = "Herman can't answer right now. Try again in a minute."
 OFF = "Herman is switched off right now."
+
+
+def bedrock_ms(raw):
+    """Bedrock's own processing time for the call, from its response header,
+    or None if it's missing."""
+    value = raw.get("ResponseMetadata", {}).get("HTTPHeaders", {}).get("x-amzn-bedrock-invocation-latency")
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def switched_on():
@@ -80,8 +96,9 @@ def handler(event, context):
     if route == STATUS:
         return respond(200, {"enabled": enabled})
 
+    started = time.monotonic()
     groups = parse_groups(claims.get("cognito:groups"))
-    log = {"route": CHAT, "sub": claims.get("sub")}
+    log = {"route": CHAT, "sub": claims.get("sub"), "email": claims.get("email"), "model": MODEL}
     if not enabled:
         print(json.dumps({**log, "status": 503, "off": True}))
         return respond(503, {"message": OFF, "enabled": False})
@@ -113,6 +130,7 @@ def handler(event, context):
     print(json.dumps({
         **log, "status": 200, "stop": response.get("stop_reason"),
         "in": usage.get("input_tokens"), "out": usage.get("output_tokens"),
+        "bedrockMs": bedrock_ms(raw), "totalMs": round((time.monotonic() - started) * 1000),
         "type": new_draft["type"] if new_draft else None,
         "ready": bool(result and result["ready"]), "fallback": result is None,
     }))

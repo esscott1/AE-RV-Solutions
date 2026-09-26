@@ -62,6 +62,7 @@ resource "aws_apigatewayv2_route" "admin" {
     "GET /admin/conversations",
     "GET /admin/features",
     "POST /admin/features/{name}",
+    "GET /admin/herman-usage",
   ])
 
   api_id             = aws_apigatewayv2_api.employees.id

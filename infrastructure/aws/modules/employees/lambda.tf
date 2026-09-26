@@ -1,14 +1,18 @@
 # --- Employee API Lambdas ------------------------------------------------------
-#
+
+locals {
+  # The switches the admin Feature Mgr page can flip: those passed in
+  # (Eddie's), plus Herman's, which this module owns.
+  feature_flags = merge(var.feature_flags, { herman = aws_ssm_parameter.herman_enabled.name })
+
+  # Herman's model as his log lines record it: the inference profile's ID,
+  # after the ARN's last /. AI Stats prices his turns with it.
+  herman_model = element(split("/", var.model_id), length(split("/", var.model_id)) - 1)
+}
+
 # One zip of lambda/ for every function: they share claims.py. output_file_mode
 # pins the files' permissions, so a plan run on Windows builds the same zip
 # (and hash) as CI on Linux.
-# The switches the admin Feature Mgr page can flip: those passed in (Eddie's),
-# plus Herman's, which this module owns.
-locals {
-  feature_flags = merge(var.feature_flags, { herman = aws_ssm_parameter.herman_enabled.name })
-}
-
 data "archive_file" "lambda" {
   type             = "zip"
   source_dir       = "${path.module}/lambda"
@@ -136,6 +140,21 @@ data "aws_iam_policy_document" "admin" {
       resources = [for name in values(local.feature_flags) : "arn:aws:ssm:${local.region}:${data.aws_caller_identity.current.account_id}:parameter${name}"]
     }
   }
+
+  # Herman's usage on AI Stats (herman_usage.py): a Logs Insights query over
+  # his log group only. Reading and stopping a query can't be scoped to a
+  # log group.
+  statement {
+    sid       = "QueryHermanLogs"
+    actions   = ["logs:StartQuery"]
+    resources = ["${aws_cloudwatch_log_group.assistant.arn}:*"]
+  }
+
+  statement {
+    sid       = "ReadQueryResults"
+    actions   = ["logs:GetQueryResults", "logs:StopQuery"]
+    resources = ["*"]
+  }
 }
 
 resource "aws_iam_role_policy" "admin" {
@@ -152,7 +171,7 @@ resource "aws_cloudwatch_log_group" "admin" {
 
 resource "aws_lambda_function" "admin" {
   function_name    = "${var.name_prefix}-admin"
-  description      = "/admin/* on the employee API, for admins: Eddie's usage and chat conversations, and the feature switches."
+  description      = "/admin/* on the employee API, for admins: Eddie's and Herman's usage, Eddie's conversations, and the feature switches."
   role             = aws_iam_role.admin.arn
   runtime          = "python3.13"
   architectures    = ["arm64"]
@@ -176,6 +195,12 @@ resource "aws_lambda_function" "admin" {
       ADMIN_ROLE_NAME         = aws_iam_role.admin.name
       FLAG_WORKFLOW_ROLE_NAME = var.flag_workflow_role_name
       TERRAFORM_ROLE_NAME     = var.terraform_role_name
+      # Herman's usage (herman_usage.py): where his log lines are, the model
+      # older lines are counted as, and prices per model. He uses the same
+      # model as Eddie, so the same prices.
+      HERMAN_LOG_GROUP = aws_cloudwatch_log_group.assistant.name
+      HERMAN_MODEL     = local.herman_model
+      HERMAN_PRICES    = jsonencode({ (local.herman_model) = [var.price_per_mtok_input, var.price_per_mtok_output] })
     }
   }
 
