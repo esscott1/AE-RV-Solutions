@@ -236,6 +236,19 @@
   white-space: nowrap;
 }
 
+.admin-panel__caption {
+  padding-bottom: 0.35rem;
+  color: var(--pine-900);
+  font-weight: 600;
+  text-align: left;
+}
+
+/* An email or a long sign-in ID: let it wrap on a phone. */
+.admin-panel__table tbody th.admin-panel__who {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .admin-panel__expand {
   padding: 0;
   border: 0;

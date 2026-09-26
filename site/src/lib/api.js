@@ -191,6 +191,13 @@ export function getAdminConversations(idToken, days) {
   return getAdmin(`admin/conversations?days=${days}`, idToken);
 }
 
+// Herman's usage for the last `days` days, from his logs: turns, tokens,
+// estimated cost and response times per day, per model and per employee.
+// {status: 'error'} includes the server's 503 when his logs couldn't be read.
+export function getHermanUsage(idToken, days) {
+  return getAdmin(`admin/herman-usage?days=${days}`, idToken);
+}
+
 // Employee API calls with any method and an optional JSON body: knowledge
 // (/kb/*), Herman (/assistant/*) and feature switches (/admin/features).
 // Every call returns {status: 'ok', data}, {status: 'invalid', message} (the
