@@ -270,6 +270,8 @@ All three flip the same parameter, so they never disagree.
   admin's user ID.
 - **Workflow changes:** attributed to the workflow's role. Its run history
   shows who ran it.
+- **Terraform:** changes made by Terraform's CI role, such as creating the
+  switch, show as "Terraform".
 - **Anything else:** shown as the AWS identity.
 
 The API enforces the flag on every request, so switching it off also stops

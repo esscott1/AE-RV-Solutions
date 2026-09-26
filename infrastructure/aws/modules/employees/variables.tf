@@ -106,3 +106,9 @@ variable "flag_workflow_role_name" {
   type        = string
   default     = "github-actions-chatbot-toggle"
 }
+
+variable "terraform_role_name" {
+  description = "The role Terraform's CI applies run as (bootstrap/main.tf), so the Features page labels the changes it makes, such as creating a switch, as \"Terraform\"."
+  type        = string
+  default     = "github-actions-terraform"
+}

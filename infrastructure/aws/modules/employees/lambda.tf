@@ -169,6 +169,7 @@ resource "aws_lambda_function" "admin" {
       FEATURE_FLAGS           = jsonencode(var.feature_flags)
       ADMIN_ROLE_NAME         = aws_iam_role.admin.name
       FLAG_WORKFLOW_ROLE_NAME = var.flag_workflow_role_name
+      TERRAFORM_ROLE_NAME     = var.terraform_role_name
     }
   }
 
