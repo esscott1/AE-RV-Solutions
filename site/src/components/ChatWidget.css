@@ -58,24 +58,97 @@
   max-height: none;
 }
 
-/* A size dragged with the corner handle, set as two variables by
-   ChatWidget.jsx. The limits keep it on screen if the browser window
-   shrinks afterwards. */
-.chat-widget__panel--sized {
+/* A window the visitor has dragged or resized: it floats where they put it.
+   lib/floatingWindow.js sets the four variables and keeps it on screen. */
+.chat-widget__panel--free {
+  position: fixed;
+  left: var(--chat-widget-left);
+  top: var(--chat-widget-top);
   width: var(--chat-widget-width);
   height: var(--chat-widget-height);
-  max-width: calc(100vw - 2.5rem);
-  max-height: calc(100vh - 7rem);
-  max-height: calc(100dvh - 7rem);
+  max-height: none;
 }
 
-/* The resize handle on the top-left corner, over the dark header: two
-   short diagonal strokes, like a window's resize grip. */
+/* Invisible drag strips along each edge and corner, with the matching
+   resize cursor. Inside the window, since it clips anything outside. */
+.chat-widget__edge {
+  position: absolute;
+  z-index: 2;
+  touch-action: none;
+}
+
+.chat-widget__edge--n,
+.chat-widget__edge--s {
+  left: 12px;
+  right: 12px;
+  height: 6px;
+  cursor: ns-resize;
+}
+
+.chat-widget__edge--n {
+  top: 0;
+}
+
+.chat-widget__edge--s {
+  bottom: 0;
+}
+
+.chat-widget__edge--e,
+.chat-widget__edge--w {
+  top: 12px;
+  bottom: 12px;
+  width: 6px;
+  cursor: ew-resize;
+}
+
+.chat-widget__edge--e {
+  right: 0;
+}
+
+.chat-widget__edge--w {
+  left: 0;
+}
+
+.chat-widget__edge--ne,
+.chat-widget__edge--nw,
+.chat-widget__edge--se,
+.chat-widget__edge--sw {
+  width: 12px;
+  height: 12px;
+}
+
+.chat-widget__edge--nw {
+  top: 0;
+  left: 0;
+  cursor: nwse-resize;
+}
+
+.chat-widget__edge--ne {
+  top: 0;
+  right: 0;
+  cursor: nesw-resize;
+}
+
+.chat-widget__edge--sw {
+  bottom: 0;
+  left: 0;
+  cursor: nesw-resize;
+}
+
+.chat-widget__edge--se {
+  bottom: 0;
+  right: 0;
+  cursor: nwse-resize;
+}
+
+/* The visible grip on the top-left corner, over the dark header: two short
+   diagonal strokes, like a window's resize grip. It's also the keyboard
+   handle (arrows resize, Shift+arrows move). */
 .chat-widget__grip {
   position: absolute;
   top: 0;
   left: 0;
-  z-index: 1;
+  z-index: 3;
   width: 18px;
   height: 18px;
   padding: 0;
@@ -100,6 +173,9 @@
 }
 
 .chat-widget__header {
+  cursor: move;
+  user-select: none;
+  touch-action: none;
   display: flex;
   align-items: center;
   gap: 0.75rem;
@@ -379,16 +455,23 @@
     max-height: calc(100vh - 6rem);
   }
 
+  /* Phones: the window spans the screen, so it doesn't float, resize, or
+     move (lib/floatingWindow.js ignores drags here too). */
   .chat-widget__panel--expanded,
-  .chat-widget__panel--sized {
+  .chat-widget__panel--free {
+    position: static;
     width: 100%;
     height: calc(100vh - 6rem);
     height: calc(100dvh - 6rem);
   }
 
-  /* Phones: the window already spans the screen, so there's nothing to
-     drag. */
-  .chat-widget__grip {
+  .chat-widget__grip,
+  .chat-widget__edge {
     display: none;
+  }
+
+  .chat-widget__header {
+    cursor: auto;
+    touch-action: auto;
   }
 }
