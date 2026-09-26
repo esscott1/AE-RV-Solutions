@@ -1,8 +1,12 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { Suspense, lazy, useEffect, useId, useRef, useState } from 'react';
 import { chatConfigured, getChatStatus, sendChatMessage } from '../lib/api.js';
-import { hasEmployeeSession, saveTeachSeed } from '../lib/teachEddie.js';
+import { hasEmployeeSession } from '../lib/herman.js';
 import FormattedReply from './FormattedReply.jsx';
 import './ChatWidget.css';
+
+// Herman, the employee assistant, is a second tab for signed-in employees.
+// Loaded on demand, so customers never download his code.
+const HermanChat = lazy(() => import('./HermanChat.jsx'));
 
 // Must stay within the chat API's request limits (modules/chatbot
 // variables), which reject anything larger with a 400.
@@ -31,8 +35,8 @@ const SOURCE_CAPTIONS = {
   general: 'From general knowledge',
 };
 
-// Signed-in employees get a link under each answer that opens Herman (Add
-// Knowledge) with this exchange, to teach Eddie what he was missing. A
+// Signed-in employees get a link under each answer that switches to the
+// Herman tab with this exchange, to teach Eddie what he was missing. A
 // "general" answer means no A&E knowledge matched: that's the gap to fill.
 const TEACH_TEXT = {
   general: 'Eddie had no A&E info for this. Teach him with Herman',
@@ -107,9 +111,12 @@ export default function ChatWidget() {
   const [conversationId, setConversationId] = useState(loadConversationId);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
-  // Checked when the panel opens: the conversation (and the link) only
+  // Checked when the panel opens: the conversation (and the tabs) only
   // render then, so the server render never needs it.
   const [employee, setEmployee] = useState(false);
+  const [tab, setTab] = useState('eddie'); // eddie | herman (employees only)
+  // An Eddie exchange handed to Herman by "Teach Eddie about this".
+  const [teachSeed, setTeachSeed] = useState(null);
 
   const panelId = useId();
   const launcherRef = useRef(null);
@@ -134,7 +141,9 @@ export default function ChatWidget() {
   // browsing the site doesn't call the API.
   useEffect(() => {
     if (!open) return;
-    setEmployee(hasEmployeeSession());
+    const signedIn = hasEmployeeSession();
+    setEmployee(signedIn);
+    if (!signedIn) setTab('eddie');
     let cancelled = false;
     setStatus('checking');
     getChatStatus().then((enabled) => {
@@ -146,10 +155,10 @@ export default function ChatWidget() {
   }, [open]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || tab !== 'eddie') return;
     if (status === 'on') inputRef.current?.focus();
     else closeRef.current?.focus();
-  }, [open, status]);
+  }, [open, status, tab]);
 
   if (!chatConfigured) return null;
 
@@ -185,6 +194,8 @@ export default function ChatWidget() {
     if (event.key === 'Escape') close();
   }
 
+  const eddieTab = tab === 'eddie';
+
   return (
     <div className="chat-widget">
       {open && (
@@ -196,8 +207,28 @@ export default function ChatWidget() {
           onKeyDown={onPanelKeyDown}
         >
           <div className="chat-widget__header">
-            <span className="chat-widget__title">A&amp;E RV Solutions assistant</span>
-            {messages.length > 0 && status === 'on' && (
+            {employee ? (
+              <div className="chat-widget__tabs" role="tablist" aria-label="Assistants">
+                {[
+                  ['eddie', 'Eddie'],
+                  ['herman', 'Herman'],
+                ].map(([key, label]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    role="tab"
+                    className="chat-widget__tab"
+                    aria-selected={tab === key}
+                    onClick={() => setTab(key)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <span className="chat-widget__title">A&amp;E RV Solutions assistant</span>
+            )}
+            {eddieTab && messages.length > 0 && status === 'on' && (
               <button
                 type="button"
                 className="chat-widget__text-button"
@@ -221,11 +252,17 @@ export default function ChatWidget() {
             </button>
           </div>
 
-          {status === 'checking' && <p className="chat-widget__state">Connecting…</p>}
+          {!eddieTab && (
+            <Suspense fallback={<p className="chat-widget__state">Connecting…</p>}>
+              <HermanChat seed={teachSeed} onSeedUsed={() => setTeachSeed(null)} />
+            </Suspense>
+          )}
 
-          {status === 'off' && <p className="chat-widget__state">{OFFLINE_TEXT}</p>}
+          {eddieTab && status === 'checking' && <p className="chat-widget__state">Connecting…</p>}
 
-          {status === 'on' && (
+          {eddieTab && status === 'off' && <p className="chat-widget__state">{OFFLINE_TEXT}</p>}
+
+          {eddieTab && status === 'on' && (
             <>
               <p className="chat-widget__notice">{NOTICE_TEXT}</p>
 
@@ -260,19 +297,20 @@ export default function ChatWidget() {
                             <p className="chat-widget__source">{SOURCE_CAPTIONS[message.source]}</p>
                           )}
                           {employee && message.route === 'answer' && messages[i - 1]?.role === 'user' && (
-                            <a
+                            <button
+                              type="button"
                               className="chat-widget__teach"
-                              href="/add-knowledge/"
-                              onClick={() =>
-                                saveTeachSeed({
+                              onClick={() => {
+                                setTeachSeed({
                                   question: messages[i - 1].content,
                                   reply: message.content,
                                   source: message.source,
-                                })
-                              }
+                                });
+                                setTab('herman');
+                              }}
                             >
                               {TEACH_TEXT[message.source] ?? TEACH_TEXT.default} →
-                            </a>
+                            </button>
                           )}
                         </>
                       ) : (

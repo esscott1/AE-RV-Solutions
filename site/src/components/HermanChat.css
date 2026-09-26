@@ -1,0 +1,127 @@
+/* Styles for HermanChat (the chat window's Herman tab). Every class is
+   prefixed .herman-chat__ because an island's CSS is global (CLAUDE.md). The
+   message list, input and buttons reuse the chat window's .chat-widget__
+   classes (ChatWidget.css), so both tabs look the same. Colours come from
+   the tokens in src/styles/global.css. */
+
+.herman-chat__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid var(--sage-200);
+  color: var(--pine-900);
+  font-size: 0.8rem;
+}
+
+.herman-chat__signin {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.herman-chat__signin p {
+  margin: 0;
+}
+
+/* The Eddie exchange this chat started from. */
+.herman-chat__seed {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.6rem 0.8rem;
+  border-left: 4px solid var(--lantern-500);
+  border-radius: 8px;
+  background: var(--canvas-100);
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+}
+
+.herman-chat__seed p,
+.herman-chat__card p,
+.herman-chat__card ul {
+  margin: 0;
+}
+
+.herman-chat__label {
+  color: var(--sage-600);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.herman-chat__notice {
+  margin: 0;
+  padding: 0.6rem 0.8rem;
+  border-radius: 8px;
+  background: var(--canvas-100);
+  color: var(--pine-900);
+  font-size: 0.9rem;
+}
+
+.herman-chat__error {
+  margin: 0;
+  color: var(--clay-700);
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+/* --- The draft card --- */
+
+.herman-chat__card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--sage-600);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--pine-950);
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
+.herman-chat__title {
+  font-weight: 600;
+}
+
+.herman-chat__needed ul {
+  padding-left: 1.2rem;
+}
+
+.herman-chat__ready {
+  color: var(--pine-900);
+}
+
+.herman-chat__note {
+  padding-left: 0.6rem;
+  border-left: 3px solid var(--clay-700);
+}
+
+.herman-chat__card .knowledge__doc {
+  align-self: stretch;
+  padding: 0.6rem;
+  border-radius: 8px;
+  background: var(--canvas-50);
+  font-size: 0.85rem;
+}
+
+.herman-chat__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+/* The chat window's text buttons are styled for its dark header; these sit
+   on light backgrounds. */
+.herman-chat__bar .chat-widget__text-button,
+.herman-chat__card .chat-widget__text-button {
+  padding: 0;
+  color: var(--pine-900);
+}

@@ -371,14 +371,6 @@
   border: 0;
 }
 
-/* --- Add Knowledge: chat with Herman, or the form --- */
-
-.knowledge__modes {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
 /* Herman's note on an entry he drafted (KBValidation). */
 .knowledge__review-note {
   padding: 0.6rem 0.9rem;

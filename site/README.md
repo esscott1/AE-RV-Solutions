@@ -62,22 +62,26 @@ idle (about 70 KB gzipped, almost all React itself).
   breaks) as React elements, never as HTML (`FormattedReply.jsx`, shared with
   Herman). Technician-referral and emergency replies get a "Safety notice"
   style.
-- **Signed-in employees** see a "Teach Eddie about this" link under each of
-  Eddie's answers. It saves that exchange in `sessionStorage`
-  (`src/lib/teachEddie.js`) and opens Add Knowledge, where Herman starts from
-  it. The link is display-only and grants nothing: Herman's API checks the
-  employee's token.
+- **Signed-in employees** get **Eddie | Herman** tabs in the same window,
+  and a "Teach Eddie about this" link under each of Eddie's answers that
+  switches to Herman with that exchange. The tabs are display-only
+  (`src/lib/herman.js` looks for a sign-in session) and grant nothing:
+  Herman's API checks the employee's token.
 
 ## Teaching Eddie with Herman
 
-On `/add-knowledge/`, employees can **chat with Herman** (the default) or
-fill in the form. Herman (`KnowledgeChat.jsx`) is the employee-only assistant
-on the employee API (`POST /assistant/chat`). He interviews the employee and
-builds a draft entry beside the chat, which they can also edit by hand.
+Herman is the employee-only assistant on the employee API
+(`POST /assistant/chat`). He lives in the chat window's Herman tab
+(`HermanChat.jsx`). It's loaded on demand, with the sign-in library, only
+when an employee opens that tab, so customers never download it.
 
-- **Submit for review** sends the draft through the same `POST /kb/entries`
-  as the form, marked `origin: "chat"` along with Herman's note for the
-  reviewer, if any.
+- He interviews the employee, and his draft shows as a card in the chat,
+  updated each turn.
+- **Submit for review** on the card sends the draft through the same
+  `POST /kb/entries` as the Add Knowledge form, marked `origin: "chat"`, with
+  Herman's note for the reviewer if he wrote one.
+- **Edit in the form** opens `/add-knowledge/` with the draft filled in. The
+  form is otherwise unchanged: the kind-of-knowledge tiles and guided fields.
 - An admin approves or rejects it on KBValidation, which shows a "Drafted
   with Herman" badge, the note, and the author's employee ID.
 - The conversation lives in `sessionStorage` (`ae-rv-kb-intake`) for the tab

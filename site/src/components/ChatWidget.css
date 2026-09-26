@@ -56,6 +56,33 @@
   color: var(--canvas-50);
 }
 
+/* Eddie | Herman, for signed-in employees (in place of the title). */
+.chat-widget__tabs {
+  display: flex;
+  flex: 1;
+  gap: 0.25rem;
+}
+
+.chat-widget__tab {
+  padding: 0.3rem 0.8rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--canvas-50);
+  font: inherit;
+  font-family: var(--font-display);
+  cursor: pointer;
+}
+
+.chat-widget__tab:hover {
+  border-color: var(--sage-600);
+}
+
+.chat-widget__tab[aria-selected='true'] {
+  background: var(--canvas-50);
+  color: var(--pine-950);
+}
+
 .chat-widget__title {
   flex: 1;
   font-family: var(--font-display);
@@ -185,13 +212,22 @@
   font-style: italic;
 }
 
-/* Employees only: opens Herman with this exchange (see TEACH_TEXT). */
+/* Employees only: switches to the Herman tab with this exchange (see
+   TEACH_TEXT). */
 .chat-widget__teach {
   display: inline-block;
   margin-top: 0.4rem;
+  padding: 0;
+  border: 0;
+  background: none;
   color: var(--clay-700);
+  font: inherit;
   font-size: 0.8rem;
   font-weight: 600;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+  cursor: pointer;
 }
 
 .chat-widget__teach:hover {
