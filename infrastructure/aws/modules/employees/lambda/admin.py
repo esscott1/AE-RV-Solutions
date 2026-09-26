@@ -45,6 +45,7 @@ s3 = boto3.client("s3")
 apigateway = boto3.client("apigateway")
 ssm = boto3.client("ssm")
 logs = boto3.client("logs")
+cognito = boto3.client("cognito-idp")
 
 
 def requested_days(event):
@@ -227,7 +228,7 @@ ROUTES = {
     "GET /admin/features": lambda event, caller: features.list_features(ssm),
     "POST /admin/features/{name}": lambda event, caller: features.set_feature(
         ssm, caller, (event.get("pathParameters") or {}).get("name"), parse_body(event)),
-    "GET /admin/herman-usage": lambda event, caller: herman_usage.usage(logs, requested_days(event)),
+    "GET /admin/herman-usage": lambda event, caller: herman_usage.usage(logs, requested_days(event), cognito),
 }
 
 
