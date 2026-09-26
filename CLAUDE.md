@@ -126,12 +126,17 @@ deploy through GitHub Actions, never through a cloud-native push trigger:
   bucket have `prevent_destroy`, so any change that would destroy or replace
   them fails at plan time on the PR. To tear one down on purpose, remove its
   `prevent_destroy` in its own PR first.
-- **Chatbot on/off:** the Actions tab → "Chatbot on/off" workflow
-  (`chatbot-toggle.yml`). It flips the SSM parameter `/ae-rv/chatbot/enabled`,
-  which the chat API checks on every request, and takes effect in seconds
-  with no deploy. Fallback: `aws ssm put-parameter --name
-  /ae-rv/chatbot/enabled --value true|false --overwrite`. Terraform ignores
-  the parameter's value, so applies never undo a toggle.
+- **Chatbot on/off:** normally the site's **Features** admin page
+  (`/features/`, admins only), which flips the SSM parameter
+  `/ae-rv/chatbot/enabled` through `POST /admin/features/eddie`. The chat API
+  checks it on every request, so a change takes effect in seconds with no
+  deploy. Backups when the site or sign-in is down:
+  - the Actions tab → "Chatbot on/off" workflow (`chatbot-toggle.yml`);
+  - `aws ssm put-parameter --name /ae-rv/chatbot/enabled --value true|false
+    --overwrite`.
+
+  Terraform ignores the parameter's value and description, so applies never
+  undo a toggle or its who-changed-it note.
 - The repo is public, so CI logs are world-readable. Both Terraform
   workflows mask the Amplify webhook URL (its token can start builds, and
   the provider doesn't mark it sensitive).
