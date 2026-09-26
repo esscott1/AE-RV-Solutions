@@ -12,6 +12,10 @@ response times.
 Costs are estimates of Bedrock model cost only, from the token counts and
 HERMAN_PRICES (model -> [input, output] dollars per million tokens). A model
 with no price shows its cost as unknown (null), never as $0.
+
+Employees are shown by their current email, looked up in the user pool
+(USER_POOL_ID) by `sub`, since emails can change and older lines have none.
+If the lookup fails or the account is gone, the logged email (or null) stays.
 """
 
 import datetime
@@ -26,6 +30,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 LOG_GROUP = os.environ.get("HERMAN_LOG_GROUP", "")
 DEFAULT_MODEL = os.environ.get("HERMAN_MODEL", "")
 PRICES = json.loads(os.environ.get("HERMAN_PRICES") or "{}")
+USER_POOL_ID = os.environ.get("USER_POOL_ID", "")
 QUERY_TIMEOUT = 12  # seconds; the admin function times out at 20
 ROW_LIMIT = 10000  # Logs Insights' maximum
 
@@ -88,7 +93,22 @@ def timing(values):
     return {"median": round(statistics.median(values)), "max": max(values)}
 
 
-def usage(logs, days):
+def current_email(cognito, sub):
+    """The user's email in the pool now, or None if unknown. Never raises."""
+    if not USER_POOL_ID or cognito is None or sub == "unknown":
+        return None
+    try:
+        users = cognito.list_users(UserPoolId=USER_POOL_ID, Filter=f'sub = "{sub}"', Limit=1)["Users"]
+    except (ClientError, BotoCoreError, KeyError):
+        return None
+    for user in users:
+        for attribute in user.get("Attributes", []):
+            if attribute.get("Name") == "email":
+                return attribute.get("Value")
+    return None
+
+
+def usage(logs, days, cognito=None):
     start = datetime.datetime.combine(days[0], datetime.time(), tzinfo=datetime.timezone.utc)
     end = datetime.datetime.now(datetime.timezone.utc)
     rows = run_query(logs, start, end)
@@ -165,6 +185,9 @@ def usage(logs, days):
          for m, b in by_model.items() if b["turns"] or b["off"] or b["errors"]),
         key=lambda m: -m["turns"],
     )
+    for person in per_employee.values():
+        person["email"] = current_email(cognito, person["sub"]) or person["email"]
+
     employees_out = sorted(
         ({"email": p["email"], "sub": p["sub"], "turns": p["turns"], "tokensIn": p["tokensIn"],
           "tokensOut": p["tokensOut"], "cost": add_costs(p["costs"])} for p in per_employee.values()),

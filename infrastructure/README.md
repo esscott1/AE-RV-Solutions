@@ -616,8 +616,12 @@ Employee clicks "Submit for review" ─► POST /kb/entries {type, fields, origi
   - **Costs:** priced per model from `HERMAN_PRICES`, the same Haiku rates as
     Eddie. A model with no price shows as unknown, never $0.
   - **Older lines:** those without a model count as the current one.
+  - **Employees:** shown by their current Cognito email, looked up by `sub`
+    (older lines have no email, and emails can change). If the lookup fails
+    or the account is gone, the logged email or the `sub` shows instead.
   - **Permissions:** the admin role can start queries on Herman's log group
-    only.
+    only. It can also `ListUsers` on the employee pool only, for the
+    email lookup.
 - **Cost.** About half a cent per turn (Haiku). The API's shared throttle is
   2 requests a second.
 
