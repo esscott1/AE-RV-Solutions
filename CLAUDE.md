@@ -28,7 +28,10 @@ Domain: aervsolutions.com (registered with GoDaddy, DNS pointing to AWS Amplify)
   → KBViewer) through the knowledge API (`modules/employees`, `kb.py`), and
   lives in the private `ae-rv-chatbot-kb-docs-*` bucket. The data source
   indexes only `approved/`. Knowledge never goes in this repo (the old
-  `knowledge-base/` folder and its sync workflow were retired 2026-09-24)
+  `knowledge-base/` folder and its sync workflow were retired 2026-09-24).
+  PII redaction happens only in the chat widget (`site/src/lib/redact.js`),
+  before a message is sent; the chat API and transcripts don't redact
+  anything themselves
 - Employee sign-in: Cognito user pool (Essentials, passwords + passkeys,
   admin-created accounts only) → HTTP API with a JWT authorizer → Lambda
   (`modules/employees/`). Protected content comes only from that API, never
@@ -92,10 +95,12 @@ npm run dev       # http://localhost:4321
 npm run build     # outputs to dist/
 npm run preview   # serve the production build locally
 npm run check     # astro check: type/diagnostic check, run by Site CI on PRs
+npm test          # node:test unit tests in site/tests/, run by Site CI on PRs
 ```
 
-There is no test suite or linter configured yet; `npm run check` plus a
-successful build is the only automated gate.
+There is no linter configured yet. `npm run check`, `npm test` and a
+successful build are the automated gate. The tests so far cover the chat
+widget's PII redaction (`src/lib/redact.js`).
 
 ## Conventions
 

@@ -58,5 +58,6 @@ cd site
 npm install
 npm run dev       # http://localhost:4321
 npm run check     # the same type check CI runs
+npm test          # unit tests (site/tests/), also run by CI
 npm run build
 ```
