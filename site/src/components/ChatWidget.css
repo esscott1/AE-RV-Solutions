@@ -403,6 +403,16 @@
 }
 
 /* Deliberately small and quiet: a footnote, not a banner. */
+/* Under a customer message whose personal details were replaced before
+   sending (lib/redact.js). */
+.chat-widget__message .chat-widget__redacted {
+  margin-top: 0.3rem;
+  color: var(--pine-900);
+  font-size: 0.7rem;
+  font-style: italic;
+  opacity: 0.8;
+}
+
 .chat-widget__privacy {
   margin: 0.5rem 0 0;
   color: var(--pine-900);

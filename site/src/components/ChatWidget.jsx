@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect, useId, useRef, useState } from 'react';
 import { chatConfigured, getChatStatus, sendChatMessage } from '../lib/api.js';
 import { EDGES, useFloatingWindow } from '../lib/floatingWindow.js';
 import { hasEmployeeSession } from '../lib/herman.js';
+import { PII_LABELS, redactPII } from '../lib/redact.js';
 import FormattedReply from './FormattedReply.jsx';
 import './ChatWidget.css';
 
@@ -23,9 +24,10 @@ const NOTICE_TEXT =
   'AI assistant. For electrical or battery hazards, contact a technician. Automated or bulk access is not permitted.';
 // Shown small under the message box. Chats are saved as transcripts
 // (modules/chatbot/transcripts.tf); "train Eddie" means improving his answers
-// and knowledge from real questions, not training an AI model.
+// and knowledge from real questions, not training an AI model. Redaction
+// (lib/redact.js) is pattern-based and misses most names, hence the request.
 const PRIVACY_TEXT =
-  "Chats are saved for 30 days to help train Eddie. We never save your name, IP address, or location, so please don't type personal details.";
+  "Chats are saved for 30 days to help train Eddie. Phone numbers, emails, and similar details are removed before sending, but please don't type personal details.";
 const SAFETY_ROUTES = new Set(['safety_referral', 'emergency']);
 
 // Shown under answers so visitors know where each one came from. Eddie
@@ -56,10 +58,32 @@ function requestWindow(messages) {
   }));
 }
 
+// The customer's message as it will be sent: personal details replaced by
+// placeholders (lib/redact.js), and cut back to the API's limit, since a
+// placeholder can be longer than what it replaced.
+function redactedMessage(content, earlier = []) {
+  const { text, found } = redactPII(content);
+  return {
+    role: 'user',
+    content: text.slice(0, MAX_USER_CHARS),
+    redacted: found.length > 0 ? found : earlier,
+  };
+}
+
+// Customer messages are redacted again on load, so a conversation saved
+// before redaction existed is cleaned too.
 function loadConversation() {
   try {
     const saved = JSON.parse(sessionStorage.getItem(STORAGE_KEY) ?? '[]');
-    return Array.isArray(saved) ? saved : [];
+    if (!Array.isArray(saved)) return [];
+    return saved.map((message) =>
+      message?.role === 'user' && typeof message.content === 'string'
+        ? {
+            ...message,
+            ...redactedMessage(message.content, Array.isArray(message.redacted) ? message.redacted : []),
+          }
+        : message,
+    );
   } catch {
     return [];
   }
@@ -178,7 +202,7 @@ export default function ChatWidget() {
     const text = draft.trim();
     if (!text || sending) return;
 
-    const next = [...messages, { role: 'user', content: text }];
+    const next = [...messages, redactedMessage(text)];
     setMessages(next);
     setDraft('');
     setSending(true);
@@ -351,7 +375,15 @@ export default function ChatWidget() {
                           )}
                         </>
                       ) : (
-                        <p>{message.content}</p>
+                        <>
+                          <p>{message.content}</p>
+                          {message.redacted?.length > 0 && (
+                            <p className="chat-widget__redacted">
+                              Removed before sending:{' '}
+                              {message.redacted.map((type) => PII_LABELS[type] ?? type).join(', ')}
+                            </p>
+                          )}
+                        </>
                       )}
                     </div>
                   );
